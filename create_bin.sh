@@ -1,0 +1,2 @@
+arm-none-eabi-objcopy -O binary target/thumbv7em-none-eabihf/release/examples/rtic_test target/thumbv7em-none-eabihf/release/examples/rtic_test_stm32g4xx.bin
+#arm-none-eabi-objcopy -O binary target/thumbv6m-none-eabi/release/examples/blinky_slow target/thumbv6m-none-eabi/release/examples/blinky_slow.bin
