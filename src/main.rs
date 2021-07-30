@@ -23,7 +23,7 @@ use cortex_m::peripheral::syst::SystClkSource;
 use stm32f0xx_hal as hal;
 
 use crate::hal::{delay::Delay, pac, prelude::*};
-use vhrdcan::{FrameId, RawFrame};
+use vhrdcan::{FrameId, RawFrame, RawFrameRef};
 use core::borrow::BorrowMut;
 use stm32f0xx_hal::pac::syscfg::cfgr1::MEM_MODE_A::SRAM;
 use crc::{Crc, Algorithm, CRC_32_AUTOSAR};
@@ -91,7 +91,7 @@ fn can_parser<'a>(expecting_id: &FrameId, prev_can_state: CanState, rx_frame: &'
 
 #[entry]
 fn main() -> ! {
-   // rtt_init_print!();
+    rtt_init_print!();
     let mut state = State::CheckNVConfig;
     let mut prev_state = state;
     let mut p = peripherals::setup_peripherals();
@@ -108,14 +108,17 @@ fn main() -> ! {
          state = match state{
              State::CheckNVConfig => {
                  prev_state = State::CheckNVConfig;
-                 match get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG)) == nv_config.config_crc{
+                 match get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)) == nv_config.config_crc{
                      true => { State::CheckBootloaderValidity }
-                     false => {State::Error }
+                     false => {
+                         rprintln!("0x{:08x} != 0x{:08x}", nv_config.config_crc, get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)));
+                         State::Error
+                     }
                  }
              }
              State::CheckBootloaderValidity => {
                  prev_state = State::CheckBootloaderValidity;
-                 if nv_config.board_config.bootloader_size + 0x0800_0000 < NV_CONFIG_START_ADDR as u32 {
+                 if nv_config.board_config.bootloader_size + 0x0800_0000 < NV_CONFIG_START_ADDR as u32 && nv_config.board_config.bootloader_size != 0 {
                      match get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)) == nv_config.board_config.bootloader_crc {
                          true => { State::CheckForFirmware }
                          false => { State::Error }
@@ -125,7 +128,7 @@ fn main() -> ! {
              }
              State::CheckForFirmware => {
                  prev_state = State::CheckForFirmware;
-                 if nv_config.board_config.fw_size > 0 && nv_config.board_config.fw_size < (flash_size_bytes() - SIZE_OF_NVCONFIG as u32 - 10240)  { State::CheckFirmwareValidity } // 10240 - max bootloader size
+                 if nv_config.board_config.fw_size > 0 && nv_config.board_config.fw_size < (flash_size_bytes() - SIZE_OF_NVCONFIG as u32 - 10u32.kb())  { State::CheckFirmwareValidity } // 10240 - max bootloader size
                  else { State::Error }
              }
              State::CheckFirmwareValidity => {
@@ -169,7 +172,7 @@ fn main() -> ! {
              }
              State::WaitingNewCommandEndless => {
                  match prev_state{
-                     State::CheckNVConfig => {
+                     State::CheckNVConfig | State::CheckBootloaderValidity => {
                          if p.5.interrupt_flags().rx0if_is_set() {
                              let rx_frame = p.5.receive(McpReceiveBuffer::Buffer0);
                              p.5.reset_interrupt_flags(0xFF);
@@ -183,20 +186,36 @@ fn main() -> ! {
                                  CanState::StartOfTransfer => {
                                      rprintln!("ST");
                                      nv_config_range.erase(p.1.borrow_mut()).unwrap();
+                                     p.5.send(RawFrameRef{
+                                         id: RX_NV_CONFIG,
+                                         data: &[],
+                                     }, McpPriority::LowIntermediate);
                                      State::WaitingNewCommandEndless
                                  }
                                  CanState::DataTransfer => {
                                      rprintln!("T");
                                      nv_config_range.write(p.1.borrow_mut(), can_res.1).unwrap();
+                                     p.5.send(RawFrameRef{
+                                         id: RX_NV_CONFIG,
+                                         data: &[],
+                                     }, McpPriority::LowIntermediate);
                                      State::WaitingNewCommandEndless
                                  }
                                  CanState::EndOfTransfer => {
                                      rprintln!("EndT");
+                                     p.5.send(RawFrameRef{
+                                         id: RX_NV_CONFIG,
+                                         data: &[],
+                                     }, McpPriority::LowIntermediate);
                                      nv_config_range.flush(p.1.borrow_mut());
                                      State::Reboot
                                  }
                              }
                          }else if can_state == CanState::WaitingOfTransfer{
+                             p.5.send(RawFrameRef{
+                                 id: RX_NV_CONFIG,
+                                 data: &[],
+                             }, McpPriority::LowIntermediate);
                              State::Error
                          }
                          else{
@@ -217,20 +236,36 @@ fn main() -> ! {
                                  CanState::StartOfTransfer => {
                                      rprintln!("ST");
                                      firmware_range.erase(p.1.borrow_mut()).unwrap();
+                                     p.5.send(RawFrameRef{
+                                         id: RX_NEW_FIRMWARE,
+                                         data: &[],
+                                     }, McpPriority::LowIntermediate);
                                      State::WaitingNewCommandEndless
                                  }
                                  CanState::DataTransfer => {
                                      rprintln!("T");
                                      firmware_range.write(p.1.borrow_mut(), can_res.1).unwrap();
+                                     p.5.send(RawFrameRef{
+                                         id: RX_NEW_FIRMWARE,
+                                         data: &[],
+                                     }, McpPriority::LowIntermediate);
                                      State::WaitingNewCommandEndless
                                  }
                                  CanState::EndOfTransfer => {
                                      rprintln!("EndT");
                                      firmware_range.flush(p.1.borrow_mut());
+                                     p.5.send(RawFrameRef{
+                                         id: RX_NEW_FIRMWARE,
+                                         data: &[],
+                                     }, McpPriority::LowIntermediate);
                                      State::Reboot
                                  }
                              }
                          }else if can_state == CanState::WaitingOfTransfer{
+                             p.5.send(RawFrameRef{
+                                 id: RX_NEW_FIRMWARE,
+                                 data: &[],
+                             }, McpPriority::LowIntermediate).ok();
                              State::Error
                          }
                          else{
@@ -251,7 +286,8 @@ fn main() -> ! {
                      }
                      State::CheckBootloaderValidity => {
                          blink_led(&mut p.0, 2);
-                         State::Error
+                         //State::Error
+                         State::WaitingNewCommandEndless
                      }
                      State::CheckForFirmware => {
                          blink_led(&mut p.0, 3);
