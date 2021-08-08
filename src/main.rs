@@ -239,7 +239,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->(FrameId, &'a [u8])>
 
 #[entry]
 fn main() -> ! {
-    rtt_init_print!();
+    //rtt_init_print!();
     let mut state = State::CheckNVConfig;
     let mut prev_state = state;
     let mut p = peripherals::setup_peripherals();
