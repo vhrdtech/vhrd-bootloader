@@ -63,11 +63,11 @@ fn mcp25625_init(
         MCP25625SPI_FREQ.0 * 1_000_000,
         rcc.clocks.sysclk().0
     );
-    mcp25625_configure(&mut mcp25625)?;
+    //mcp25625_configure(&mut mcp25625)?;
     Ok(mcp25625)
 }
 
-fn mcp25625_configure(mcp25625: &mut Mcp25625Instance) -> Result<(), McpErrorKind> {
+pub fn mcp25625_configure(mcp25625: &mut Mcp25625Instance, filter_cfg: FiltersConfig) -> Result<(), McpErrorKind> {
     // let filters_buffer0 = FiltersConfigBuffer0 {
     //     mask: FiltersMask::AllExtendedIdBits,
     //     filter0: config::,
@@ -80,8 +80,7 @@ fn mcp25625_configure(mcp25625: &mut Mcp25625Instance) -> Result<(), McpErrorKin
     //     filter4: None,
     //     filter5: None,
     // };
-    // let filters_config = FiltersConfig::Filter(filters_buffer0, Some(filters_buffer1));
-    let filters_config = FiltersConfig::ReceiveAll;
+    // let filters_config = FiltersConfig::Filter(filters_buffer0, Some(filters_buffer1));filter_cfg
     let mcp_config = MCP25625Config {
         brp: 0, // Fosc=16MHz
         prop_seg: 3,
@@ -89,9 +88,9 @@ fn mcp25625_configure(mcp25625: &mut Mcp25625Instance) -> Result<(), McpErrorKin
         ph_seg2: 2,
         sync_jump_width: 2,
         rollover_to_buffer1: true,
-        filters_config,
         // filters_config: FiltersConfig::ReceiveAll,
-        operation_mode: McpOperationMode::Normal
+        operation_mode: McpOperationMode::Normal,
+        filters_config: filter_cfg
     };
     mcp25625.apply_config(mcp_config)?;
     mcp25625.enable_interrupts(0b0001_1111);
@@ -127,7 +126,7 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, Mcp25625
         ph_seg1: 1,
         ph_seg2: 2,
         sync_jump_width: 1,
-        rollover_to_buffer1: true,
+        rollover_to_buffer1: false,
         //filters_config,
         filters_config: FiltersConfig::ReceiveAll,
         operation_mode: McpOperationMode::Normal
