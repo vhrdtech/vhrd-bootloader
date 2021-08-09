@@ -27,7 +27,7 @@ use vhrdcan::{FrameId, FrameRef};
 use core::borrow::BorrowMut;
 use stm32f0xx_hal::pac::syscfg::cfgr1::MEM_MODE_A::SRAM;
 use crc::{Crc, Algorithm, CRC_32_AUTOSAR};
-use mcp25625::{McpPriority, McpReceiveBuffer, TxBufferChoice};
+use mcp25625::{McpPriority, McpReceiveBuffer, TxBufferChoice, McpErrorKind};
 use crate::CanState::WaitingOfTransfer;
 use crate::State::CheckNVConfig;
 
@@ -297,7 +297,10 @@ fn main() -> ! {
                      filter1: None
                  };
                  let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
-                 mcp25625_configure(p.5.borrow_mut(), filter_cfg).unwrap();
+                 match mcp25625_configure(p.5.borrow_mut(), filter_cfg){
+                     Ok(_) => {}
+                     Err(_) => {panic!()}
+                 }
                  res
              }
              State::CheckBootloaderValidity => {
