@@ -138,6 +138,8 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, Mcp25625
     let miso: Mcp25625Miso = gpiob.pb4.into_alternate_af0(&cs);//.into_analog(&cs);
     let cs_pin: Mcp25625Cs = gpioc.pc14.into_push_pull_output(&cs);
     let irq: Mcp25625Irq = gpioc.pc15.into_pull_up_input(&cs);
+    let mut can_stby = gpioa.pa15.into_push_pull_output(&cs);
+    can_stby.set_low().ok();
 
     let mcp25625 = match mcp25625_init(dp.SPI1, sck, miso, mosi, cs_pin, &mut clock) {
         Ok(mcp25625) => {
