@@ -280,7 +280,7 @@ fn main() -> ! {
          state = match state{
              State::CheckNVConfig => {
                  prev_state = State::CheckNVConfig;
-                 match get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)) == nv_config.config_crc{
+                 let res = match get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)) == nv_config.config_crc{
                      true => {
                          node_id = unsafe{NodeId::new_unchecked(nv_config.board_config.uavcan_node_id)};
                          State::CheckBootloaderValidity
@@ -289,28 +289,27 @@ fn main() -> ! {
                          //rprintln!("0x{:08x} != 0x{:08x}", nv_config.config_crc, get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)));
                          State::Error
                      }
-                 }
+                 };
+                 let mask: u32 = 0x0200_3FFF;//(node_id as u32) << 7 | FLASHER_NODE_ID.inner() as u32;
+                 let filters_buffer0 = mcp25625::FiltersConfigBuffer0 {
+                     mask: mcp25625::FiltersMask::Custom(mask),
+                     filter0: FrameId::new_extended( (1u32 << 25) |((node_id.inner() as u32) << 7) | FLASHER_NODE_ID.inner() as u32).unwrap(),
+                     filter1: None
+                 };
+                 let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
+                 mcp25625_configure(p.5.borrow_mut(), filter_cfg).unwrap();
+                 res
              }
              State::CheckBootloaderValidity => {
                  prev_state = State::CheckBootloaderValidity;
                  if nv_config.board_config.bootloader_size + 0x0800_0000 <= NV_CONFIG_START_ADDR as u32 && nv_config.board_config.bootloader_size != 0 {
-                     let res = match get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)) == nv_config.board_config.bootloader_crc {
+                     match get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)) == nv_config.board_config.bootloader_crc {
                          true => { State::CheckForFirmware }
                          false => {
                              //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.bootloader_crc, get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)));
                              State::Error
                          }
-                     };
-
-                     let mask: u32 = 0x0200_3FFF;//(node_id as u32) << 7 | FLASHER_NODE_ID.inner() as u32;
-                     let filters_buffer0 = mcp25625::FiltersConfigBuffer0 {
-                         mask: mcp25625::FiltersMask::Custom(mask),
-                         filter0: FrameId::new_extended( (1u32 << 25) |((node_id.inner() as u32) << 7) | FLASHER_NODE_ID.inner() as u32).unwrap(),
-                         filter1: None
-                     };
-                     let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
-                     mcp25625_configure(p.5.borrow_mut(), filter_cfg).unwrap();
-                     res
+                     }
                  }
                  else {
                      //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.bootloader_crc, get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)));
