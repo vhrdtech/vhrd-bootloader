@@ -179,7 +179,7 @@ enum CanWorkerResult{
     None
 }
 
-fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->(FrameId, &'a [u8])>(can_iface: &mut Mcp25625Instance, src_node_id: &NodeId, mut r: R) -> Option<CanWorkerResult> {
+fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a [u8])>>(can_iface: &mut Mcp25625Instance, src_node_id: &NodeId, mut r: R) -> Option<CanWorkerResult> {
     let mut cnt = 0u16;
     while cnt < 4000{
         cnt += 1;
@@ -192,7 +192,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->(FrameId, &'a [u8])>
                     TransferKind::Service(s) => {
                         if s.destination_node_id == *src_node_id {
                             if s.is_request {
-                                let mut res = CanWorkerResult::None;
+                                let mut can_worker_res = CanWorkerResult::None;
                                 if rx_frame.data().len() != 0 {
                                     let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
                                     let data_transfer_state =
@@ -210,7 +210,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->(FrameId, &'a [u8])>
                                         }
                                         WRITE_FIRMWARE_SERVICE => {
                                             if data_transfer_state == DataTransferState::EndOfTransfer {
-                                                res = CanWorkerResult::FirmwareReceived;
+                                                can_worker_res = CanWorkerResult::FirmwareReceived;
                                             }
                                             r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
                                         }
@@ -222,12 +222,23 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->(FrameId, &'a [u8])>
                                         }
                                     };
                                     //rprintln!("tx_sl");
-                                    can_transmit(can_iface, res.0, res.1);
+                                    match res{
+                                        None => {}
+                                        Some(rs) => {
+                                            can_transmit(can_iface, rs.0, rs.1);
+                                        }
+                                    }
+
                                 } else {
                                     let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
-                                    can_transmit(can_iface, res.0, res.1);
+                                    match res{
+                                        None => {}
+                                        Some(rs) => {
+                                            can_transmit(can_iface, rs.0, rs.1);
+                                        }
+                                    }
                                 }
-                                return Some(res);
+                                return Some(can_worker_res);
                             }
                         }
                     }
@@ -351,7 +362,7 @@ fn main() -> ! {
                                          _ => {&[]}
                                      };
                                      //rprintln!("Send res");
-                                     (FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, READ_SERVICE,false, Priority::High).into()}).unwrap(), res_slice)
+                                     Some((FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, READ_SERVICE,false, Priority::High).into()}).unwrap(), res_slice))
                                  }
                                  CommandEvent::Write(bw, tr, data) => {
                                      let (mut flash_region, service_id) = match bw{
@@ -372,14 +383,16 @@ fn main() -> ! {
                                              //rprintln!("Transfer DOne!!!");
                                          }
                                      }
-                                     (FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, service_id,false, Priority::High).into()}).unwrap(), &[])
+                                     Some((FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, service_id,false, Priority::High).into()}).unwrap(), &[]))
                                  }
                                  //CommandEvent::UnlockBootloader => {}
                                  CommandEvent::Error(er) => {
-                                     (FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
+                                     //(FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
+                                    None
                                  }
                                  _=>{
-                                     (FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
+                                     //(FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
+                                    None
                                  }
                              }
                          })
