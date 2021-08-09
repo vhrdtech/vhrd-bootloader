@@ -190,43 +190,45 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->(FrameId, &'a [u8])>
                 match uavcan_id.transfer_kind {
                     TransferKind::Message(m) => {}
                     TransferKind::Service(s) => {
-                        if s.is_request {
-                            let mut res = CanWorkerResult::None;
-                            if rx_frame.data().len() != 0 {
-                                let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
-                                let data_transfer_state =
-                                    if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
+                        if s.destination_node_id == *src_node_id {
+                            if s.is_request {
+                                let mut res = CanWorkerResult::None;
+                                if rx_frame.data().len() != 0 {
+                                    let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
+                                    let data_transfer_state =
+                                        if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
 
-                                let res = match s.service_id {
-                                    READ_SERVICE => {
-                                        let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
+                                    let res = match s.service_id {
+                                        READ_SERVICE => {
+                                            let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
 
-                                        //rprintln!("{:?}",read_option);
-                                        r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
-                                    }
-                                    WRITE_CONFIG_SERVICE => {
-                                        r(CommandEvent::Write(BootloaderWriteOptions::Config, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
-                                    }
-                                    WRITE_FIRMWARE_SERVICE => {
-                                        if data_transfer_state == DataTransferState::EndOfTransfer{
-                                            res = CanWorkerResult::FirmwareReceived;
+                                            //rprintln!("{:?}",read_option);
+                                            r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
                                         }
-                                        r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
-                                    }
-                                    UNLOCK_BOOTLOADER => {
-                                        r(CommandEvent::UnlockBootloader, src_node_id, &s.destination_node_id)
-                                    }
-                                    _ => {
-                                        r(CommandEvent::Error(CommandError::WrongServiceId), src_node_id, &s.destination_node_id)
-                                    }
-                                };
-                                //rprintln!("tx_sl");
-                                can_transmit(can_iface, res.0, res.1);
-                            } else {
-                                let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
-                                can_transmit(can_iface, res.0, res.1);
+                                        WRITE_CONFIG_SERVICE => {
+                                            r(CommandEvent::Write(BootloaderWriteOptions::Config, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
+                                        }
+                                        WRITE_FIRMWARE_SERVICE => {
+                                            if data_transfer_state == DataTransferState::EndOfTransfer {
+                                                res = CanWorkerResult::FirmwareReceived;
+                                            }
+                                            r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
+                                        }
+                                        UNLOCK_BOOTLOADER => {
+                                            r(CommandEvent::UnlockBootloader, src_node_id, &s.destination_node_id)
+                                        }
+                                        _ => {
+                                            r(CommandEvent::Error(CommandError::WrongServiceId), src_node_id, &s.destination_node_id)
+                                        }
+                                    };
+                                    //rprintln!("tx_sl");
+                                    can_transmit(can_iface, res.0, res.1);
+                                } else {
+                                    let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
+                                    can_transmit(can_iface, res.0, res.1);
+                                }
+                                return Some(res);
                             }
-                            return Some(res);
                         }
                     }
                 }
