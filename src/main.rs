@@ -41,7 +41,7 @@ mod ticks_time;
 fn blink_led(led: &mut UsrLedPin, amount_of_blinks: u8){
     for _ in 0..amount_of_blinks{
         led.set_high().ok();
-        delay(1_000_000);
+        delay(200_000);
         led.set_low();
         delay(1_000_000);
     }
@@ -406,33 +406,33 @@ fn main() -> ! {
              State::Error => {
                  let state = match prev_state {
                      State::WaitingNewCommandTimeout | State::WaitingNewCommandEndless => {
-                         blink_led(&mut p.0, 1);
+                         blink_led(&mut p.0, 3);
                          //asm::delay(100_000);
                          prev_state
                      }
                      State::CheckNVConfig => {
-                         blink_led(&mut p.0, 2);
+                         blink_led(&mut p.0, 4);
                          asm::delay(8_000_000);
                         State::WaitingNewCommandEndless
                      }
                      State::CheckBootloaderValidity => {
-                         blink_led(&mut p.0, 3);
+                         blink_led(&mut p.0, 5);
                          asm::delay(8_000_000);
                          //State::Error
                          State::WaitingNewCommandEndless
                      }
                      State::CheckForFirmware => {
-                         blink_led(&mut p.0, 4);
+                         blink_led(&mut p.0, 6);
                          asm::delay(8_000_000);
                          State::WaitingNewCommandEndless
                      }
                      State::CheckFirmwareValidity => {
-                         blink_led(&mut p.0, 5);
+                         blink_led(&mut p.0, 7);
                          asm::delay(8_000_000);
                          State::WaitingNewCommandEndless
                      }
                      _ => {
-                         blink_led(&mut p.0, 6);
+                         blink_led(&mut p.0, 8);
                          asm::delay(8_000_000);
                          State::Error
                      }
