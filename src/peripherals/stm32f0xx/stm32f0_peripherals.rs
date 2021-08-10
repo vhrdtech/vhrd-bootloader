@@ -1,4 +1,4 @@
-
+use cfg_if::cfg_if;
 use stm32f0xx_hal as hal;
 use hal::{
     stm32,
@@ -15,94 +15,42 @@ use stm32f0xx_hal::{
 };
 
 use pac::{Interrupt,SPI1};
-use mcp25625;
 
-pub type Mcp25625Sck = PB3<Alternate<AF0>>;
-pub const MCP25625SPI_FREQ: MegaHertz = MegaHertz(1);
-pub type Mcp25625Miso = PB4<Alternate<AF0>>;
-pub type Mcp25625Mosi = PB5<Alternate<AF0>>;
-pub type Mcp25625Cs = PC14<Output<PushPull>>;
-pub type Mcp25625Spi = SPI1;
-pub type Mcp25625Instance = mcp25625::MCP25625<hal::spi::Spi<Mcp25625Spi, Mcp25625Sck, Mcp25625Miso, Mcp25625Mosi, EightBit>, Mcp25625Cs>;
-pub type Mcp25625Irq = PC15<Input<PullUp>>;
-pub const MCP25625_IRQ_HANDLER: Interrupt = Interrupt::EXTI4_15;
+use crate::config::*;
+
+#[cfg(feature = "spi-can")]
+use crate::mcp_canbus::*;
+#[cfg(feature = "spi-can")]
+pub type CanInstance = Mcp25625Instance;
+
+#[cfg(feature = "reg-can")]
+use crate::reg_canbus::*;
+#[cfg(feature = "reg-can")]
+pub type CanInstance = CanStmInstance;
 
 pub use stm32f0xx_hal::stm32::FLASH;
 pub use stm32f0xx_hal::stm32::SYST;
 pub use stm32f0xx_hal::prelude::*;
 
 use crate::ticks_time::TicksTime;
-use stm32f0xx_hal::pac::{SYSCFG, SCB};
-use stm32f0xx_hal::gpio::{Input, PullUp, AF0};
-use stm32f0xx_hal::spi::EightBit;
-use mcp25625::{MCP25625Config, McpOperationMode, FiltersConfig, McpErrorKind};
-use stm32f0xx_hal::gpio::gpiob::{PB4, PB5};
-use stm32f0xx_hal::gpio::gpioc::{PC15, PC14};
-use stm32f0xx_hal::time::MegaHertz;
+
+use stm32f0xx_hal::pac::{SYSCFG, SCB, Peripherals};
+
 
 pub type UsrLedPin = PA6<Output<PushPull>>;
 
-fn mcp25625_init(
-    spi: Mcp25625Spi,
-    sck: Mcp25625Sck,
-    miso: Mcp25625Miso,
-    mosi: Mcp25625Mosi,
-    cs: Mcp25625Cs,
-    rcc: &mut hal::rcc::Rcc,
-) -> Result<Mcp25625Instance, mcp25625::McpErrorKind> {
-    let spi = hal::spi::Spi::spi1(
-        spi,
-        (sck, miso, mosi),
-        embedded_hal::spi::MODE_0,
-        MCP25625SPI_FREQ,
-        rcc
-    );
-    let mut mcp25625 = mcp25625::MCP25625::new(
-        spi,
-        cs,
-        MCP25625SPI_FREQ.0 * 1_000_000,
-        rcc.clocks.sysclk().0
-    );
-    //mcp25625_configure(&mut mcp25625)?;
-    Ok(mcp25625)
-}
+pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, CanInstance, SYSCFG){
 
-pub fn mcp25625_configure(mcp25625: &mut Mcp25625Instance, filter_cfg: FiltersConfig) -> Result<(), McpErrorKind> {
-    // let filters_buffer0 = FiltersConfigBuffer0 {
-    //     mask: FiltersMask::AllExtendedIdBits,
-    //     filter0: config::,
-    //     filter1: None
-    // };
-    // let filters_buffer1 = FiltersConfigBuffer1 {
-    //     mask: FiltersMask::OnlyStandardIdBits,
-    //     filter2: config::,
-    //     filter3: None,
-    //     filter4: None,
-    //     filter5: None,
-    // };
-    // let filters_config = FiltersConfig::Filter(filters_buffer0, Some(filters_buffer1));filter_cfg
-    let mcp_config = MCP25625Config {
-        brp: 0, // Fosc=16MHz
-        prop_seg: 3,
-        ph_seg1: 2,
-        ph_seg2: 2,
-        sync_jump_width: 2,
-        rollover_to_buffer1: true,
-        // filters_config: FiltersConfig::ReceiveAll,
-        operation_mode: McpOperationMode::Normal,
-        filters_config: filter_cfg
+    let mut dp= match stm32::Peripherals::take(){
+        None => {panic!()}
+        Some(dp) => { dp }
     };
-    mcp25625.apply_config(mcp_config)?;
-    mcp25625.enable_interrupts(0b0001_1111);
-    Ok(())
-}
-
-pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, Mcp25625Instance, SYSCFG){
-
-    let mut dp= stm32::Peripherals::take().unwrap();
     let cs = unsafe {CriticalSection::new()};
     let mut rcc = dp.RCC;
-    let mut cp = stm32::CorePeripherals::take().unwrap();
+    let mut cp = match stm32::CorePeripherals::take(){
+        None => {panic!()}
+        Some(cp) => {cp}
+    };
 
     rcc.apb1enr.modify(|_, w| w.canen().enabled()); // can time enb
     rcc.apb2enr.modify(|_, w| w.syscfgen().enabled());
@@ -116,45 +64,39 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, Mcp25625
     let gpiob = dp.GPIOB.split(&mut clock);
     let gpioc = dp.GPIOC.split(&mut clock);
 
-
-
     let usr_led = gpioa.pa6.into_push_pull_output(&cs);
-
-    let mcp_config = MCP25625Config {
-        brp: 0, // Fosc=16MHz
-        prop_seg: 0,
-        ph_seg1: 1,
-        ph_seg2: 2,
-        sync_jump_width: 1,
-        rollover_to_buffer1: false,
-        //filters_config,
-        filters_config: FiltersConfig::ReceiveAll,
-        operation_mode: McpOperationMode::Normal
-    };
-
-    let sck: Mcp25625Sck = gpiob.pb3.into_alternate_af0(&cs);//.into_analog(&cs);
-    let mosi: Mcp25625Mosi = gpiob.pb5.into_alternate_af0(&cs);//.into_analog(&cs);
-    let miso: Mcp25625Miso = gpiob.pb4.into_alternate_af0(&cs);//.into_analog(&cs);
-    let cs_pin: Mcp25625Cs = gpioc.pc14.into_push_pull_output(&cs);
-    let irq: Mcp25625Irq = gpioc.pc15.into_pull_up_input(&cs);
-    let mut can_stby = gpioa.pa15.into_push_pull_output(&cs);
-    can_stby.set_low().ok();
-
-    let mcp25625 = match mcp25625_init(dp.SPI1, sck, miso, mosi, cs_pin, &mut clock) {
-        Ok(mcp25625) => {
-            Some(mcp25625)
-        }
-        Err(e) => {
-            None
-        }
-    };
 
     let ticks_time = TicksTime::new(&mut cp.SYST, &clock);
     let delay = Delay::new(cp.SYST, &clock);
-    let can_rx = gpioa.pa11.into_alternate_af4(&cs);
-    let can_tx = gpioa.pa12.into_alternate_af4(&cs);
 
-    (usr_led, dp.FLASH, cp.SCB, ticks_time, delay, mcp25625.unwrap(), dp.SYSCFG)
+    cfg_if! {
+    if #[cfg(feature = "spi-can")]{
+        let sck: Mcp25625Sck = gpiob.pb3.into_alternate_af0(&cs);//.into_analog(&cs);
+        let mosi: Mcp25625Mosi = gpiob.pb5.into_alternate_af0(&cs);//.into_analog(&cs);
+        let miso: Mcp25625Miso = gpiob.pb4.into_alternate_af0(&cs);//.into_analog(&cs);
+        let cs_pin: Mcp25625Cs = gpioc.pc14.into_push_pull_output(&cs);
+        let irq: Mcp25625Irq = gpioc.pc15.into_pull_up_input(&cs);
+        let mut can_stby = gpioa.pa15.into_push_pull_output(&cs);
+        can_stby.set_low().ok();
+
+        match mcp25625_init(dp.SPI1, sck, miso, mosi, cs_pin, &mut clock){
+                Ok(can_iface) => {
+                    (usr_led, dp.FLASH, cp.SCB, ticks_time, delay, can_iface, dp.SYSCFG)
+                }
+                Err(_) => {panic!()}
+            }
+        }
+        else if #[cfg(feature = "reg-can")]{
+            let can_rx = gpioa.pa11.into_alternate_af4(&cs);
+            let can_tx = gpioa.pa12.into_alternate_af4(&cs);
+            let can_iface = reg_can_init(dp.CAN, can_tx, can_rx, &mut clock);
+            (usr_led, dp.FLASH, cp.SCB, ticks_time, delay, can_iface, dp.SYSCFG)
+        }
+    }
+
+
+
+
 }
 pub fn deinit_peripherals() {
     unsafe{

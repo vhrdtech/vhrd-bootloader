@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Check_stm32f0xx" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="+nightly check --features stm32f0xx --color=always" />
+  <configuration default="false" name="&lt;C&gt;_stm32f072_reg-can" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="+nightly check --features stm32f072,reg-can --color=always" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />

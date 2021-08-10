@@ -15,22 +15,26 @@ vhrdcan = {path = "../vhrdcan"}#"0.1.0"
 embedded-hal = "0.2.4"
 vhrd-module-nvconfig = {git = "https://github.com/vhrdtech/vhrd-module-nvconfig.git", branch = "master"}
 crc = "2.0.0"
-bxcan = "0.2.0"
-mcp25625 = {path = "../mcp25625"}#"0.1.0"
 uavcan-llr = {path = "../uavcan-llr", features = ["vhrdcan"]}
 #{git = "https://github.com/vhrdtech/uavcan-llr.git", branch = "main"}
+
+[dependencies.mcp25625]
+path = "../mcp25625"#"0.1.0"
+optional = true
+
+[dependencies.bxcan]
+version = "0.2.0"
+optional = true
 
 [dependencies.vhrd-flash-writer]
 git = "https://github.com/vhrdtech/vhrd-flash-writer.git"
 branch = "main"
 default-features = false
-features = ["stm32f051"]
 optional = false
 
 [dependencies.stm32f0xx-hal]
 git = "https://github.com/stm32-rs/stm32f0xx-hal.git"
 branch = "master"
-features = ["stm32f051", "rt"]
 default-features = false
 optional = true
 
@@ -38,22 +42,23 @@ optional = true
 path = "../stm32g4xx-hal"
 version = "0.0.0"
 default-features = false
-features = ["rt", "stm32g474"]
 optional = true
 
 [dependencies.stm32l4xx-hal]
 version = "0.6"
 default-features = false
-features = ["rt", "stm32l4x6"]
 optional = true
 
 [features]
 default = []
 cortex-m0 = []
 
-stm32f0xx = ["stm32f0xx-hal", "cortex-m0"]
-stm32g4xx = ["stm32g4xx-hal"]
-stm32l4xx = ["stm32l4xx-hal"]
+
+spi-can = ["mcp25625"]
+reg-can = ["bxcan"]
+stm32f051 = ["stm32f0xx-hal/stm32f051","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f051"]
+stm32f072 = ["stm32f0xx-hal/stm32f072","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f072"] #fix flash-writer
+
 
 [[bin]]
 name = "vhrd-bootloader"

@@ -7,7 +7,7 @@
 use cortex_m::asm;
 use cortex_m::asm::delay;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
-
+use cfg_if::cfg_if;
 mod peripherals;
 use vhrd_flash_writer::flash::{flash_read, flash_read_slice, stm32_device_signature, FlashWriter, FlashWriterError, flash_size_bytes};
 use peripherals::stm32p::*;
@@ -23,19 +23,16 @@ use cortex_m::peripheral::syst::SystClkSource;
 use stm32f0xx_hal as hal;
 
 use crate::hal::{delay::Delay, pac, prelude::*};
-use vhrdcan::{FrameId, FrameRef};
+use vhrdcan::{FrameId, FrameRef, Frame};
 use core::borrow::BorrowMut;
 use stm32f0xx_hal::pac::syscfg::cfgr1::MEM_MODE_A::SRAM;
 use crc::{Crc, Algorithm, CRC_32_AUTOSAR};
-use mcp25625::{McpPriority, McpReceiveBuffer, TxBufferChoice, McpErrorKind};
 use crate::CanState::WaitingOfTransfer;
 use crate::State::CheckNVConfig;
 
 use uavcan_llr::types::{TransferId, CanId, NodeId, SubjectId, Priority, TransferKind, Service, ServiceId};
 use core::convert::TryFrom;
 use uavcan_llr::tailbyte::TailByte;
-use mcp25625::FiltersConfig::Filter;
-
 
 mod ticks_time;
 
@@ -128,9 +125,10 @@ enum CommandEvent<'a>{
     Error(CommandError),
 }
 
-fn can_transmit(can_iface: &mut Mcp25625Instance, frame_id: FrameId, data: &[u8]){
+fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
     //rprintln!("Can_tx");
     if data.is_empty(){
+        #[cfg(feature = "spi-can")]
         can_iface.send(
             FrameRef {
                 id: frame_id,
@@ -139,6 +137,8 @@ fn can_transmit(can_iface: &mut Mcp25625Instance, frame_id: FrameId, data: &[u8]
             TxBufferChoice::Any,
             McpPriority::Low
         ).ok();
+        #[cfg(feature = "reg-can")]
+            can_iface.transmit(&BxFrame::new_data(vhrdcanid2bxcanid(frame_id), BxData::new(&[]).unwrap())).ok();
     }
     else{
         let chunks = data.chunks_exact(7);
@@ -150,6 +150,7 @@ fn can_transmit(can_iface: &mut Mcp25625Instance, frame_id: FrameId, data: &[u8]
         for msg in chunks.into_iter(){
             can_data[0..7].copy_from_slice(&msg[0..7]);
             can_data[7] = u8::try_from(tail_byte.next().unwrap()).unwrap();
+            #[cfg(feature = "spi-can")]
             can_iface.send(
                 FrameRef {
                     id: frame_id,
@@ -158,10 +159,13 @@ fn can_transmit(can_iface: &mut Mcp25625Instance, frame_id: FrameId, data: &[u8]
                 TxBufferChoice::Any,
                 McpPriority::Low
             ).ok();
+            #[cfg(feature = "reg-can")]
+                can_iface.transmit(&BxFrame::new_data(vhrdcanid2bxcanid(frame_id), BxData::new(can_data.as_slice()).unwrap())).ok();
         }
         if !reminder.is_empty(){
             can_data[0..reminder.len()].copy_from_slice(&reminder[0..reminder.len()]);
             can_data[reminder.len()] = u8::try_from(tail_byte.next().unwrap()).unwrap();
+            #[cfg(feature = "spi-can")]
             can_iface.send(
                 FrameRef {
                     id: frame_id,
@@ -170,6 +174,8 @@ fn can_transmit(can_iface: &mut Mcp25625Instance, frame_id: FrameId, data: &[u8]
                 TxBufferChoice::Any,
                 McpPriority::Low
             ).ok();
+            #[cfg(feature = "reg-can")]
+                can_iface.transmit(&BxFrame::new_data(vhrdcanid2bxcanid(frame_id), BxData::new(&can_data[0..reminder.len() + 1]).unwrap())).ok();
         }
     }
 }
@@ -180,13 +186,17 @@ enum CanWorkerResult{
     None
 }
 
-fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a [u8])>>(can_iface: &mut Mcp25625Instance, src_node_id: &NodeId, mut r: R) -> Option<CanWorkerResult> {
+fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a [u8])>>(can_iface: &mut CanInstance, src_node_id: &NodeId, mut r: R) -> Option<CanWorkerResult> {
     let mut cnt = 0u16;
     while cnt < 4000{
         cnt += 1;
+        #[cfg(feature = "spi-can")]
         if can_iface.interrupt_flags().rx0if_is_set() {
             let rx_frame = can_iface.receive(McpReceiveBuffer::Buffer0);
-            let uavcan_id = CanId::try_from(rx_frame.id).unwrap();
+            let uavcan_id = match CanId::try_from(rx_frame.id){
+                Ok(i) => {i}
+                Err(_) => {panic!()}
+            };
             if uavcan_id.source_node_id == FLASHER_NODE_ID {
                 match uavcan_id.transfer_kind {
                     TransferKind::Message(m) => {}
@@ -246,6 +256,81 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
                 }
             }
         }
+        #[cfg(feature = "reg-can")]
+        can_iface.clear_wakeup_interrupt();
+        #[cfg(feature = "reg-can")]
+        match can_iface.receive(){
+            Err(_) => {}
+            Ok(frame) => {
+                if frame.is_data_frame() {
+                    let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap()){
+                        None => {panic!()}
+                        Some(f) => {f}
+                    };
+                    let uavcan_id = match CanId::try_from(rx_frame.id){
+                        Ok(id) => {id}
+                        Err(_) => {panic!()}
+                    };
+                    if uavcan_id.source_node_id == FLASHER_NODE_ID {
+                        match uavcan_id.transfer_kind {
+                            TransferKind::Message(m) => {}
+                            TransferKind::Service(s) => {
+                                if s.destination_node_id == *src_node_id {
+                                    if s.is_request {
+                                        let mut can_worker_res = CanWorkerResult::None;
+                                        if rx_frame.data().len() != 0 {
+                                            let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
+                                            let data_transfer_state =
+                                                if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
+
+                                            let res = match s.service_id {
+                                                READ_SERVICE => {
+                                                    let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
+
+                                                    //rprintln!("{:?}",read_option);
+                                                    r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
+                                                }
+                                                WRITE_CONFIG_SERVICE => {
+                                                    r(CommandEvent::Write(BootloaderWriteOptions::Config, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
+                                                }
+                                                WRITE_FIRMWARE_SERVICE => {
+                                                    if data_transfer_state == DataTransferState::EndOfTransfer {
+                                                        can_worker_res = CanWorkerResult::FirmwareReceived;
+                                                    }
+                                                    r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
+                                                }
+                                                UNLOCK_BOOTLOADER => {
+                                                    r(CommandEvent::UnlockBootloader, src_node_id, &s.destination_node_id)
+                                                }
+                                                _ => {
+                                                    r(CommandEvent::Error(CommandError::WrongServiceId), src_node_id, &s.destination_node_id)
+                                                }
+                                            };
+                                            //rprintln!("tx_sl");
+                                            match res {
+                                                None => {}
+                                                Some(rs) => {
+                                                    can_transmit(can_iface, rs.0, rs.1);
+                                                }
+                                            }
+                                        } else {
+                                            let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
+                                            match res {
+                                                None => {}
+                                                Some(rs) => {
+                                                    can_transmit(can_iface, rs.0, rs.1);
+                                                }
+                                            }
+                                        }
+                                        return Some(can_worker_res);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     None
 }
@@ -291,16 +376,27 @@ fn main() -> ! {
                      }
                  };
                  let mask: u32 = 0x0200_3FFF;//(node_id as u32) << 7 | FLASHER_NODE_ID.inner() as u32;
-                 let filters_buffer0 = mcp25625::FiltersConfigBuffer0 {
-                     mask: mcp25625::FiltersMask::Custom(mask),
-                     filter0: FrameId::new_extended( (1u32 << 25) |((node_id.inner() as u32) << 7) | FLASHER_NODE_ID.inner() as u32).unwrap(),
-                     filter1: None
-                 };
-                 let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
-                 match mcp25625_configure(p.5.borrow_mut(), filter_cfg){
-                     Ok(_) => {}
-                     Err(_) => {panic!()}
-                 }
+                 let filter = (1u32 << 25) |((node_id.inner() as u32) << 7) | FLASHER_NODE_ID.inner() as u32;
+                 cfg_if! {
+                    if #[cfg(feature = "spi-can")]{
+                         let filters_buffer0 = mcp25625::FiltersConfigBuffer0 {
+                             mask: mcp25625::FiltersMask::Custom(mask),
+                             filter0: FrameId::new_extended(filter).unwrap(),
+                             filter1: None
+                         };
+                         let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
+                         match mcp25625_configure(p.5.borrow_mut(), filter_cfg){
+                             Ok(_) => {}
+                             Err(_) => {panic!()}
+                         }
+                    }
+                     else if #[cfg(feature = "reg-can")] {
+                         let mut filter = unsafe{ stm32f0xx_hal::can::bxcan::filter::BankConfig::Mask32(stm32f0xx_hal::can::bxcan::filter::Mask32::frames_with_ext_id(
+                             stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(filter), stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(mask)
+                         ))};
+                         reg_can_configure(p.5.borrow_mut(), filter.borrow_mut());
+                     }
+                }
                  res
              }
              State::CheckBootloaderValidity => {
@@ -375,7 +471,11 @@ fn main() -> ! {
                                          _ => {&[]}
                                      };
                                      //rprintln!("Send res");
-                                     Some((FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, READ_SERVICE,false, Priority::High).into()}).unwrap(), res_slice))
+
+                                     Some((match FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, READ_SERVICE,false, Priority::High).into()}){
+                                         None => {panic!()}
+                                         Some(f) => {f}
+                                     }, res_slice))
                                  }
                                  CommandEvent::Write(bw, tr, data) => {
                                      let (mut flash_region, service_id) = match bw{
@@ -396,7 +496,10 @@ fn main() -> ! {
                                              //rprintln!("Transfer DOne!!!");
                                          }
                                      }
-                                     Some((FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, service_id,false, Priority::High).into()}).unwrap(), &[]))
+                                     Some((match FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, service_id,false, Priority::High).into()}){
+                                         None => {panic!()}
+                                         Some(f) => {f}
+                                     }, &[]))
                                  }
                                  //CommandEvent::UnlockBootloader => {}
                                  CommandEvent::Error(er) => {
@@ -411,7 +514,10 @@ fn main() -> ! {
                          })
                          {
                              None => {
-                                 can_transmit(p.5.borrow_mut(), (FrameId::new_extended(unsafe{CanId::new_message_kind(node_id, HARD_BIT_MSG, false, Priority::High).into()}).unwrap()), &[]);
+                                 can_transmit(p.5.borrow_mut(), ( match FrameId::new_extended(unsafe{CanId::new_message_kind(node_id, HARD_BIT_MSG, false, Priority::High).into()}){
+                                     None => {panic!()}
+                                     Some(f) => {f}
+                                 }), &[]);
                                  pass_time_us += p.3.get_delta_time_us() as u64;
                                  State::Error
                              }
