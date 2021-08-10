@@ -191,139 +191,78 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
     while cnt < 4000{
         cnt += 1;
         #[cfg(feature = "spi-can")]
-        if can_iface.interrupt_flags().rx0if_is_set() {
-            let rx_frame = can_iface.receive(McpReceiveBuffer::Buffer0);
-            let uavcan_id = match CanId::try_from(rx_frame.id){
-                Ok(i) => {i}
-                Err(_) => {panic!()}
-            };
-            if uavcan_id.source_node_id == FLASHER_NODE_ID {
-                match uavcan_id.transfer_kind {
-                    TransferKind::Message(m) => {}
-                    TransferKind::Service(s) => {
-                        if s.destination_node_id == *src_node_id {
-                            if s.is_request {
-                                let mut can_worker_res = CanWorkerResult::None;
-                                if rx_frame.data().len() != 0 {
-                                    let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
-                                    let data_transfer_state =
-                                        if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
-
-                                    let res = match s.service_id {
-                                        READ_SERVICE => {
-                                            let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
-
-                                            //rprintln!("{:?}",read_option);
-                                            r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
-                                        }
-                                        WRITE_CONFIG_SERVICE => {
-                                            r(CommandEvent::Write(BootloaderWriteOptions::Config, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
-                                        }
-                                        WRITE_FIRMWARE_SERVICE => {
-                                            if data_transfer_state == DataTransferState::EndOfTransfer {
-                                                can_worker_res = CanWorkerResult::FirmwareReceived;
-                                            }
-                                            r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
-                                        }
-                                        UNLOCK_BOOTLOADER => {
-                                            r(CommandEvent::UnlockBootloader, src_node_id, &s.destination_node_id)
-                                        }
-                                        _ => {
-                                            r(CommandEvent::Error(CommandError::WrongServiceId), src_node_id, &s.destination_node_id)
-                                        }
-                                    };
-                                    //rprintln!("tx_sl");
-                                    match res{
-                                        None => {}
-                                        Some(rs) => {
-                                            can_transmit(can_iface, rs.0, rs.1);
-                                        }
-                                    }
-
-                                } else {
-                                    let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
-                                    match res{
-                                        None => {}
-                                        Some(rs) => {
-                                            can_transmit(can_iface, rs.0, rs.1);
-                                        }
-                                    }
-                                }
-                                return Some(can_worker_res);
-                            }
-                        }
-                    }
+            let rx_frame = if can_iface.interrupt_flags().rx0if_is_set(){ Some(can_iface.receive(McpReceiveBuffer::Buffer0))}else{ None };
+        #[cfg(feature = "reg-can")]
+            let rx_frame =  match can_iface.receive() {
+                Err(_) => { None }
+                Ok(frame) => {
+                    let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap()) {
+                        None => { panic!() }
+                        Some(f) => { f }
+                    };
+                    Some(rx_frame)
                 }
-            }
-        }
-        #[cfg(feature = "reg-can")]
-        can_iface.clear_wakeup_interrupt();
-        #[cfg(feature = "reg-can")]
-        match can_iface.receive(){
-            Err(_) => {}
-            Ok(frame) => {
-                if frame.is_data_frame() {
-                    let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap()){
-                        None => {panic!()}
-                        Some(f) => {f}
-                    };
-                    let uavcan_id = match CanId::try_from(rx_frame.id){
-                        Ok(id) => {id}
-                        Err(_) => {panic!()}
-                    };
-                    if uavcan_id.source_node_id == FLASHER_NODE_ID {
-                        match uavcan_id.transfer_kind {
-                            TransferKind::Message(m) => {}
-                            TransferKind::Service(s) => {
-                                if s.destination_node_id == *src_node_id {
-                                    if s.is_request {
-                                        let mut can_worker_res = CanWorkerResult::None;
-                                        if rx_frame.data().len() != 0 {
-                                            let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
-                                            let data_transfer_state =
-                                                if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
+            };
+        match rx_frame{
+            None => {}
+            Some(rx_frame) => {
+                let uavcan_id = match CanId::try_from(rx_frame.id){
+                    Ok(id) => {id}
+                    Err(_) => {panic!()}
+                };
+                if uavcan_id.source_node_id == FLASHER_NODE_ID {
+                    match uavcan_id.transfer_kind {
+                        TransferKind::Message(m) => {}
+                        TransferKind::Service(s) => {
+                            if s.destination_node_id == *src_node_id {
+                                if s.is_request {
+                                    let mut can_worker_res = CanWorkerResult::None;
+                                    if rx_frame.data().len() != 0 {
+                                        let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
+                                        let data_transfer_state =
+                                            if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
 
-                                            let res = match s.service_id {
-                                                READ_SERVICE => {
-                                                    let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
+                                        let res = match s.service_id {
+                                            READ_SERVICE => {
+                                                let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
 
-                                                    //rprintln!("{:?}",read_option);
-                                                    r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
-                                                }
-                                                WRITE_CONFIG_SERVICE => {
-                                                    r(CommandEvent::Write(BootloaderWriteOptions::Config, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
-                                                }
-                                                WRITE_FIRMWARE_SERVICE => {
-                                                    if data_transfer_state == DataTransferState::EndOfTransfer {
-                                                        can_worker_res = CanWorkerResult::FirmwareReceived;
-                                                    }
-                                                    r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
-                                                }
-                                                UNLOCK_BOOTLOADER => {
-                                                    r(CommandEvent::UnlockBootloader, src_node_id, &s.destination_node_id)
-                                                }
-                                                _ => {
-                                                    r(CommandEvent::Error(CommandError::WrongServiceId), src_node_id, &s.destination_node_id)
-                                                }
-                                            };
-                                            //rprintln!("tx_sl");
-                                            match res {
-                                                None => {}
-                                                Some(rs) => {
-                                                    can_transmit(can_iface, rs.0, rs.1);
-                                                }
+                                                //rprintln!("{:?}",read_option);
+                                                r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
                                             }
-                                        } else {
-                                            let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
-                                            match res {
-                                                None => {}
-                                                Some(rs) => {
-                                                    can_transmit(can_iface, rs.0, rs.1);
+                                            WRITE_CONFIG_SERVICE => {
+                                                r(CommandEvent::Write(BootloaderWriteOptions::Config, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
+                                            }
+                                            WRITE_FIRMWARE_SERVICE => {
+                                                if data_transfer_state == DataTransferState::EndOfTransfer {
+                                                    can_worker_res = CanWorkerResult::FirmwareReceived;
                                                 }
+                                                r(CommandEvent::Write(BootloaderWriteOptions::Firmware, data_transfer_state, &rx_frame.data()[0..(rx_frame.data().len() - 1)]), src_node_id, &s.destination_node_id)
+                                            }
+                                            UNLOCK_BOOTLOADER => {
+                                                r(CommandEvent::UnlockBootloader, src_node_id, &s.destination_node_id)
+                                            }
+                                            _ => {
+                                                r(CommandEvent::Error(CommandError::WrongServiceId), src_node_id, &s.destination_node_id)
+                                            }
+                                        };
+                                        //rprintln!("tx_sl");
+                                        match res{
+                                            None => {}
+                                            Some(rs) => {
+                                                can_transmit(can_iface, rs.0, rs.1);
                                             }
                                         }
-                                        return Some(can_worker_res);
+
+                                    } else {
+                                        let res = r(CommandEvent::Error(CommandError::NoCanData), src_node_id, &s.destination_node_id);
+                                        match res{
+                                            None => {}
+                                            Some(rs) => {
+                                                can_transmit(can_iface, rs.0, rs.1);
+                                            }
+                                        }
                                     }
+                                    return Some(can_worker_res);
                                 }
                             }
                         }
@@ -332,296 +271,296 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
             }
         }
     }
-    None
+None
 }
 
 
 #[entry]
 fn main() -> ! {
-    //rtt_init_print!();
-    let mut state = State::CheckNVConfig;
-    let mut prev_state = state;
-    let mut p = peripherals::setup_peripherals();
-    let mut flash_regs = p.1;
-    let mut nv_config_range = match FlashWriter::new(NV_CONFIG_START_ADDR as u32..(NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)){
-        Ok(f) => {f}
-        Err(_) => { panic!() }
-    };
-    let mut firmware_range = match FlashWriter::new(
-        (NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)
-            ..(0x0800_0000 + flash_size_bytes())){
-        Ok(f) => {f}
-        Err(_) => { panic!() }
-    };
+//rtt_init_print!();
+let mut state = State::CheckNVConfig;
+let mut prev_state = state;
+let mut p = peripherals::setup_peripherals();
+let mut flash_regs = p.1;
+let mut nv_config_range = match FlashWriter::new(NV_CONFIG_START_ADDR as u32..(NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)){
+    Ok(f) => {f}
+    Err(_) => { panic!() }
+};
+let mut firmware_range = match FlashWriter::new(
+    (NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)
+        ..(0x0800_0000 + flash_size_bytes())){
+    Ok(f) => {f}
+    Err(_) => { panic!() }
+};
 
-    let nv_config = NVConfig::get();
-    let mut pass_time_us = 0u64;
-    let mut timeout_limit = 10_000u16;
-    let mut can_state = CanState::WaitingOfTransfer;
-    let mut node_id = DEFAULT_NODE_ID;
-    p.3.count_time_from_now();
-    loop {
-       // rprintln!("{:?}",state);
-         state = match state{
-             State::CheckNVConfig => {
-                 prev_state = State::CheckNVConfig;
-                 let res = match get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)) == nv_config.config_crc{
-                     true => {
-                         node_id = unsafe{NodeId::new_unchecked(nv_config.board_config.uavcan_node_id)};
-                         State::CheckBootloaderValidity
-                     }
-                     false => {
-                         //rprintln!("0x{:08x} != 0x{:08x}", nv_config.config_crc, get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)));
-                         State::Error
-                     }
-                 };
-                 let mask: u32 = 0x0200_3FFF;//(node_id as u32) << 7 | FLASHER_NODE_ID.inner() as u32;
-                 let filter = (1u32 << 25) |((node_id.inner() as u32) << 7) | FLASHER_NODE_ID.inner() as u32;
-                 cfg_if! {
-                    if #[cfg(feature = "spi-can")]{
-                         let filters_buffer0 = mcp25625::FiltersConfigBuffer0 {
-                             mask: mcp25625::FiltersMask::Custom(mask),
-                             filter0: FrameId::new_extended(filter).unwrap(),
-                             filter1: None
-                         };
-                         let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
-                         match mcp25625_configure(p.5.borrow_mut(), filter_cfg){
-                             Ok(_) => {}
-                             Err(_) => {panic!()}
-                         }
-                    }
-                     else if #[cfg(feature = "reg-can")] {
-                         let mut filter = unsafe{ stm32f0xx_hal::can::bxcan::filter::BankConfig::Mask32(stm32f0xx_hal::can::bxcan::filter::Mask32::frames_with_ext_id(
-                             stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(filter), stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(mask)
-                         ))};
-                         reg_can_configure(p.5.borrow_mut(), filter.borrow_mut());
+let nv_config = NVConfig::get();
+let mut pass_time_us = 0u64;
+let mut timeout_limit = 10_000u16;
+let mut can_state = CanState::WaitingOfTransfer;
+let mut node_id = DEFAULT_NODE_ID;
+p.3.count_time_from_now();
+loop {
+   // rprintln!("{:?}",state);
+     state = match state{
+         State::CheckNVConfig => {
+             prev_state = State::CheckNVConfig;
+             let res = match get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)) == nv_config.config_crc{
+                 true => {
+                     node_id = unsafe{NodeId::new_unchecked(nv_config.board_config.uavcan_node_id)};
+                     State::CheckBootloaderValidity
+                 }
+                 false => {
+                     //rprintln!("0x{:08x} != 0x{:08x}", nv_config.config_crc, get_crc(flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32 + 8u32, SIZE_OF_NVCONFIG - 8)));
+                     State::Error
+                 }
+             };
+             let mask: u32 = 0x0200_3FFF;//(node_id as u32) << 7 | FLASHER_NODE_ID.inner() as u32;
+             let filter = (1u32 << 25) |((node_id.inner() as u32) << 7) | FLASHER_NODE_ID.inner() as u32;
+             cfg_if! {
+                if #[cfg(feature = "spi-can")]{
+                     let filters_buffer0 = mcp25625::FiltersConfigBuffer0 {
+                         mask: mcp25625::FiltersMask::Custom(mask),
+                         filter0: FrameId::new_extended(filter).unwrap(),
+                         filter1: None
+                     };
+                     let filter_cfg = mcp25625::FiltersConfig::Filter(filters_buffer0, None);
+                     match mcp25625_configure(p.5.borrow_mut(), filter_cfg){
+                         Ok(_) => {}
+                         Err(_) => {panic!()}
                      }
                 }
-                 res
-             }
-             State::CheckBootloaderValidity => {
-                 prev_state = State::CheckBootloaderValidity;
-                 if nv_config.board_config.bootloader_size + 0x0800_0000 <= NV_CONFIG_START_ADDR as u32 && nv_config.board_config.bootloader_size != 0 {
-                     match get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)) == nv_config.board_config.bootloader_crc {
-                         true => { State::CheckForFirmware }
-                         false => {
-                             //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.bootloader_crc, get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)));
-                             State::Error
-                         }
-                     }
+                 else if #[cfg(feature = "reg-can")] {
+                     let mut filter = unsafe{ stm32f0xx_hal::can::bxcan::filter::BankConfig::Mask32(stm32f0xx_hal::can::bxcan::filter::Mask32::frames_with_ext_id(
+                         stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(filter), stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(mask)
+                     ))};
+                     reg_can_configure(p.5.borrow_mut(), filter.borrow_mut());
                  }
-                 else {
-                     //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.bootloader_crc, get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)));
-                     State::Error
-                 }
-             }
-             State::CheckForFirmware => {
-                 prev_state = State::CheckForFirmware;
-                 if nv_config.board_config.fw_size > 0 && nv_config.board_config.fw_size < (flash_size_bytes() - SIZE_OF_NVCONFIG as u32 - 10u32.kb()) {
-                     State::CheckFirmwareValidity
-                 } // 10240 - max bootloader size
-                 else {
-                     //rprintln!("Firmware_size:{}", nv_config.board_config.fw_size);
-                     State::Error
-                 }
-             }
-             State::CheckFirmwareValidity => {
-                 prev_state = State::CheckFirmwareValidity;
-                 match get_crc(flash_read_slice::<u8>(firmware_range.get_start_address(), nv_config.board_config.fw_size as usize)) == nv_config.board_config.fw_crc {
-                     true => {
-                         State::WaitingNewCommandTimeout
-                     }
+            }
+             res
+         }
+         State::CheckBootloaderValidity => {
+             prev_state = State::CheckBootloaderValidity;
+             if nv_config.board_config.bootloader_size + 0x0800_0000 <= NV_CONFIG_START_ADDR as u32 && nv_config.board_config.bootloader_size != 0 {
+                 match get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)) == nv_config.board_config.bootloader_crc {
+                     true => { State::CheckForFirmware }
                      false => {
-                         //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.fw_crc, get_crc(flash_read_slice::<u8>(firmware_range.get_start_address(), nv_config.board_config.fw_size as usize)));
+                         //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.bootloader_crc, get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)));
                          State::Error
                      }
                  }
              }
-             State::WaitingNewCommandTimeout => {
-                 timeout_limit = nv_config.board_config.bootloader_timeout_ms;
-                 //rprintln!("to: {}", timeout_limit);
-                 prev_state = State::WaitingNewCommandTimeout;
-                 //p.3.count_time_from_now();
-                 State::WaitingCommand
-             }
-             State::WaitingNewCommandEndless => {
-                 timeout_limit = 20_000;
-                 prev_state = State::WaitingNewCommandEndless;
-                 //p.3.count_time_from_now();
-                 State::WaitingCommand
-             }
-             State::WaitingCommand => {
-                 match timeout_limit <= (pass_time_us / 1000) as u16 {
-                     true => {
-                         if prev_state == State::WaitingNewCommandTimeout{
-                             State::Boot
-                         }else{
-                             State::Reboot
-                         } }
-                     false => {
-                         match can_worker(p.5.borrow_mut(), node_id.borrow_mut() , |command, src_node_id, dst_node_id|{
-                             match command{
-                                 CommandEvent::Read(br, data) => {
-                                     //rprintln!("in read");
-                                     let res_slice = match br{
-                                         BootloaderReadOptions::Config => { flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32, SIZE_OF_NVCONFIG) }
-                                         BootloaderReadOptions::Firmware => { flash_read_slice::<u8>(firmware_range.get_start_address(), (flash_size_bytes() - (firmware_range.get_start_address() - 0x0800_0000)) as usize) }
-                                         BootloaderReadOptions::Bootloader => { flash_read_slice::<u8>(0x0800_0000u32, 10.kb()) }
-                                         //BootloaderReadOptions::RawAddress => { core::ptr::slice_from_raw_parts() }
-                                         _ => {&[]}
-                                     };
-                                     //rprintln!("Send res");
-
-                                     Some((match FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, READ_SERVICE,false, Priority::High).into()}){
-                                         None => {panic!()}
-                                         Some(f) => {f}
-                                     }, res_slice))
-                                 }
-                                 CommandEvent::Write(bw, tr, data) => {
-                                     let (mut flash_region, service_id) = match bw{
-                                         BootloaderWriteOptions::Config => { (nv_config_range.borrow_mut(), WRITE_CONFIG_SERVICE) }
-                                         BootloaderWriteOptions::Firmware => { (firmware_range.borrow_mut(), WRITE_FIRMWARE_SERVICE) }
-                                     };
-                                     match tr{
-                                         DataTransferState::StartOfTransfer => {
-                                             flash_region.erase(flash_regs.borrow_mut()).ok();
-                                             flash_region.write(flash_regs.borrow_mut(), data).ok();
-                                         }
-                                         DataTransferState::DataTransfer => {
-                                             flash_region.write(flash_regs.borrow_mut(), data).ok();
-                                         }
-                                         DataTransferState::EndOfTransfer => {
-                                             flash_region.write(flash_regs.borrow_mut(), data).ok();
-                                             flash_region.flush(flash_regs.borrow_mut()).ok();
-                                             //rprintln!("Transfer DOne!!!");
-                                         }
-                                     }
-                                     Some((match FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, service_id,false, Priority::High).into()}){
-                                         None => {panic!()}
-                                         Some(f) => {f}
-                                     }, &[]))
-                                 }
-                                 //CommandEvent::UnlockBootloader => {}
-                                 CommandEvent::Error(er) => {
-                                     //(FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
-                                    None
-                                 }
-                                 _=>{
-                                     //(FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
-                                    None
-                                 }
-                             }
-                         })
-                         {
-                             None => {
-                                 can_transmit(p.5.borrow_mut(), ( match FrameId::new_extended(unsafe{CanId::new_message_kind(node_id, HARD_BIT_MSG, false, Priority::High).into()}){
-                                     None => {panic!()}
-                                     Some(f) => {f}
-                                 }), &[]);
-                                 pass_time_us += p.3.get_delta_time_us() as u64;
-                                 State::Error
-                             }
-                             Some(r) => {
-                                 match r{
-                                     CanWorkerResult::FirmwareReceived => {
-                                         State::Reboot
-                                     }
-                                     _ => {
-                                        pass_time_us = 0;
-                                        State::WaitingCommand
-                                     }
-                                 }
-
-                             }
-                         }
-                     }
-                 }
-             }
-             State::Error => {
-                 let state = match prev_state {
-                     State::WaitingNewCommandTimeout | State::WaitingNewCommandEndless => {
-                         blink_led(&mut p.0, 3);
-                         //asm::delay(100_000);
-                         prev_state
-                     }
-                     State::CheckNVConfig => {
-                         blink_led(&mut p.0, 4);
-                         asm::delay(8_000_000);
-                        State::WaitingNewCommandEndless
-                     }
-                     State::CheckBootloaderValidity => {
-                         blink_led(&mut p.0, 5);
-                         asm::delay(8_000_000);
-                         //State::Error
-                         State::WaitingNewCommandEndless
-                     }
-                     State::CheckForFirmware => {
-                         blink_led(&mut p.0, 6);
-                         asm::delay(8_000_000);
-                         State::WaitingNewCommandEndless
-                     }
-                     State::CheckFirmwareValidity => {
-                         blink_led(&mut p.0, 7);
-                         asm::delay(8_000_000);
-                         State::WaitingNewCommandEndless
-                     }
-                     _ => {
-                         blink_led(&mut p.0, 8);
-                         asm::delay(8_000_000);
-                         State::Error
-                     }
-                 };
-                 state
-             }
-             State::Boot => {
-                 unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, BOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
-                 //rprintln!("Boot");
-                 #[cfg(not(feature = "cortex-m0"))]
-                     unsafe {
-                     let rv: usize = *(firmware_range.get_start_address() + 0x04 as *const usize);
-                     scb.vtor.write(firmware_range.get_start_address());
-                     let function = core::mem::transmute::<usize, extern "C" fn() -> !>(rv);
-                     function();
-                 }
-                 #[cfg(feature = "cortex-m0")]
-                 unsafe {
-                     cortex_m::interrupt::disable();
-                        core::ptr::copy_nonoverlapping::<u32>(firmware_range.get_start_address() as *const u32,0x2000_0000 as *mut u32, 48);
-                        p.6.cfgr1.modify(|_,w|w.mem_mode().sram());
-                     cortex_m::interrupt::enable();
-
-                     let rv: usize = *((firmware_range.get_start_address() + 4) as *const usize);
-
-                     peripherals::deinit_peripherals();
-                     let function = core::mem::transmute::<usize, extern "C" fn() -> !>(rv);
-                     function();
-                 };
-             }
-             State::Reboot => {
-
-                 state = CheckNVConfig;
-                 unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, REBOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
-                 let aircr = 0xE000ED0C as *mut u32;
-                 unsafe { *aircr = (0x5FA << 16) | (1 << 2) };
-                 State::CheckNVConfig
+             else {
+                 //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.bootloader_crc, get_crc(flash_read_slice::<u8>(0x0800_0000, nv_config.board_config.bootloader_size as usize)));
+                 State::Error
              }
          }
-    }
+         State::CheckForFirmware => {
+             prev_state = State::CheckForFirmware;
+             if nv_config.board_config.fw_size > 0 && nv_config.board_config.fw_size < (flash_size_bytes() - SIZE_OF_NVCONFIG as u32 - 10u32.kb()) {
+                 State::CheckFirmwareValidity
+             } // 10240 - max bootloader size
+             else {
+                 //rprintln!("Firmware_size:{}", nv_config.board_config.fw_size);
+                 State::Error
+             }
+         }
+         State::CheckFirmwareValidity => {
+             prev_state = State::CheckFirmwareValidity;
+             match get_crc(flash_read_slice::<u8>(firmware_range.get_start_address(), nv_config.board_config.fw_size as usize)) == nv_config.board_config.fw_crc {
+                 true => {
+                     State::WaitingNewCommandTimeout
+                 }
+                 false => {
+                     //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.fw_crc, get_crc(flash_read_slice::<u8>(firmware_range.get_start_address(), nv_config.board_config.fw_size as usize)));
+                     State::Error
+                 }
+             }
+         }
+         State::WaitingNewCommandTimeout => {
+             timeout_limit = nv_config.board_config.bootloader_timeout_ms;
+             //rprintln!("to: {}", timeout_limit);
+             prev_state = State::WaitingNewCommandTimeout;
+             //p.3.count_time_from_now();
+             State::WaitingCommand
+         }
+         State::WaitingNewCommandEndless => {
+             timeout_limit = 20_000;
+             prev_state = State::WaitingNewCommandEndless;
+             //p.3.count_time_from_now();
+             State::WaitingCommand
+         }
+         State::WaitingCommand => {
+             match timeout_limit <= (pass_time_us / 1000) as u16 {
+                 true => {
+                     if prev_state == State::WaitingNewCommandTimeout{
+                         State::Boot
+                     }else{
+                         State::Reboot
+                     } }
+                 false => {
+                     match can_worker(p.5.borrow_mut(), node_id.borrow_mut() , |command, src_node_id, dst_node_id|{
+                         match command{
+                             CommandEvent::Read(br, data) => {
+                                 //rprintln!("in read");
+                                 let res_slice = match br{
+                                     BootloaderReadOptions::Config => { flash_read_slice::<u8>(NV_CONFIG_START_ADDR as u32, SIZE_OF_NVCONFIG) }
+                                     BootloaderReadOptions::Firmware => { flash_read_slice::<u8>(firmware_range.get_start_address(), (flash_size_bytes() - (firmware_range.get_start_address() - 0x0800_0000)) as usize) }
+                                     BootloaderReadOptions::Bootloader => { flash_read_slice::<u8>(0x0800_0000u32, 10.kb()) }
+                                     //BootloaderReadOptions::RawAddress => { core::ptr::slice_from_raw_parts() }
+                                     _ => {&[]}
+                                 };
+                                 //rprintln!("Send res");
+
+                                 Some((match FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, READ_SERVICE,false, Priority::High).into()}){
+                                     None => {panic!()}
+                                     Some(f) => {f}
+                                 }, res_slice))
+                             }
+                             CommandEvent::Write(bw, tr, data) => {
+                                 let (mut flash_region, service_id) = match bw{
+                                     BootloaderWriteOptions::Config => { (nv_config_range.borrow_mut(), WRITE_CONFIG_SERVICE) }
+                                     BootloaderWriteOptions::Firmware => { (firmware_range.borrow_mut(), WRITE_FIRMWARE_SERVICE) }
+                                 };
+                                 match tr{
+                                     DataTransferState::StartOfTransfer => {
+                                         flash_region.erase(flash_regs.borrow_mut()).ok();
+                                         flash_region.write(flash_regs.borrow_mut(), data).ok();
+                                     }
+                                     DataTransferState::DataTransfer => {
+                                         flash_region.write(flash_regs.borrow_mut(), data).ok();
+                                     }
+                                     DataTransferState::EndOfTransfer => {
+                                         flash_region.write(flash_regs.borrow_mut(), data).ok();
+                                         flash_region.flush(flash_regs.borrow_mut()).ok();
+                                         //rprintln!("Transfer DOne!!!");
+                                     }
+                                 }
+                                 Some((match FrameId::new_extended(unsafe{CanId::new_service_kind(*src_node_id,  *dst_node_id, service_id,false, Priority::High).into()}){
+                                     None => {panic!()}
+                                     Some(f) => {f}
+                                 }, &[]))
+                             }
+                             //CommandEvent::UnlockBootloader => {}
+                             CommandEvent::Error(er) => {
+                                 //(FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
+                                None
+                             }
+                             _=>{
+                                 //(FrameId::new_extended(unsafe{CanId::new_message_kind(*src_node_id, ERROR_MSG, false, Priority::High).into()}).unwrap(), &[])
+                                None
+                             }
+                         }
+                     })
+                     {
+                         None => {
+                             can_transmit(p.5.borrow_mut(), ( match FrameId::new_extended(unsafe{CanId::new_message_kind(node_id, HARD_BIT_MSG, false, Priority::High).into()}){
+                                 None => {panic!()}
+                                 Some(f) => {f}
+                             }), &[]);
+                             pass_time_us += p.3.get_delta_time_us() as u64;
+                             State::Error
+                         }
+                         Some(r) => {
+                             match r{
+                                 CanWorkerResult::FirmwareReceived => {
+                                     State::Reboot
+                                 }
+                                 _ => {
+                                    pass_time_us = 0;
+                                    State::WaitingCommand
+                                 }
+                             }
+
+                         }
+                     }
+                 }
+             }
+         }
+         State::Error => {
+             let state = match prev_state {
+                 State::WaitingNewCommandTimeout | State::WaitingNewCommandEndless => {
+                     blink_led(&mut p.0, 3);
+                     //asm::delay(100_000);
+                     prev_state
+                 }
+                 State::CheckNVConfig => {
+                     blink_led(&mut p.0, 4);
+                     asm::delay(8_000_000);
+                    State::WaitingNewCommandEndless
+                 }
+                 State::CheckBootloaderValidity => {
+                     blink_led(&mut p.0, 5);
+                     asm::delay(8_000_000);
+                     //State::Error
+                     State::WaitingNewCommandEndless
+                 }
+                 State::CheckForFirmware => {
+                     blink_led(&mut p.0, 6);
+                     asm::delay(8_000_000);
+                     State::WaitingNewCommandEndless
+                 }
+                 State::CheckFirmwareValidity => {
+                     blink_led(&mut p.0, 7);
+                     asm::delay(8_000_000);
+                     State::WaitingNewCommandEndless
+                 }
+                 _ => {
+                     blink_led(&mut p.0, 8);
+                     asm::delay(8_000_000);
+                     State::Error
+                 }
+             };
+             state
+         }
+         State::Boot => {
+             unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, BOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
+             //rprintln!("Boot");
+             #[cfg(not(feature = "cortex-m0"))]
+                 unsafe {
+                 let rv: usize = *(firmware_range.get_start_address() + 0x04 as *const usize);
+                 scb.vtor.write(firmware_range.get_start_address());
+                 let function = core::mem::transmute::<usize, extern "C" fn() -> !>(rv);
+                 function();
+             }
+             #[cfg(feature = "cortex-m0")]
+             unsafe {
+                 cortex_m::interrupt::disable();
+                    core::ptr::copy_nonoverlapping::<u32>(firmware_range.get_start_address() as *const u32,0x2000_0000 as *mut u32, 48);
+                    p.6.cfgr1.modify(|_,w|w.mem_mode().sram());
+                 cortex_m::interrupt::enable();
+
+                 let rv: usize = *((firmware_range.get_start_address() + 4) as *const usize);
+
+                 peripherals::deinit_peripherals();
+                 let function = core::mem::transmute::<usize, extern "C" fn() -> !>(rv);
+                 function();
+             };
+         }
+         State::Reboot => {
+
+             state = CheckNVConfig;
+             unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, REBOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
+             let aircr = 0xE000ED0C as *mut u32;
+             unsafe { *aircr = (0x5FA << 16) | (1 << 2) };
+             State::CheckNVConfig
+         }
+     }
+}
 }
 
 #[exception]
 fn HardFault(ef: &ExceptionFrame) -> ! {
-   // rprintln!("{:#?}", ef);
-    loop {
-        asm::delay(10_000)
-    }
+// rprintln!("{:#?}", ef);
+loop {
+    asm::delay(10_000)
+}
 }
 
 #[inline(never)]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    //rprintln!("Panic: {:?}", _info);
-    loop {
-        atomic::compiler_fence(Ordering::SeqCst);
-    }
+//rprintln!("Panic: {:?}", _info);
+loop {
+    atomic::compiler_fence(Ordering::SeqCst);
+}
 }
