@@ -25,9 +25,9 @@ dependencies = [
 
 [[package]]
 name = "atomic-polyfill"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30302dda7a66f8c55932ebf208f7def840743ff64d495e9ceffcd97c18f11d39"
+checksum = "4a93ba5d6053837dbb76fd0ae26fd4f0c1859a008a783b0ce072b797c07f0f27"
 dependencies = [
  "cortex-m 0.7.3",
 ]
@@ -212,9 +212,9 @@ dependencies = [
 
 [[package]]
 name = "embedded-hal"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db184d3fa27bc7a2344250394c0264144dfe0bc81a4401801dcb964b8dd172ad"
+checksum = "e36cfb62ff156596c892272f3015ef952fe1525e85261fa3a7f327bd6b384ab9"
 dependencies = [
  "nb 0.1.3",
  "void",
@@ -291,9 +291,9 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34e26526e7168021f34243a3c8faac4dc4f938cde75a0f9b8e373cca5eb4e7ce"
+checksum = "767c746c1943728fb6f2cdb24b2cbe292dd4d6976640758060adf4bb9855a7ca"
 dependencies = [
  "atomic-polyfill",
  "hash32 0.2.1",
@@ -479,7 +479,6 @@ source = "git+https://github.com/diseraluca/stm32g4?branch=main#ac2cf408bf18fe9b
 dependencies = [
  "bare-metal 0.2.5",
  "cortex-m 0.6.7",
- "cortex-m-rt",
  "vcell",
 ]
 
@@ -505,7 +504,6 @@ checksum = "a9abc2787195d7055b342be5a7934d74099fd7e92b81c0771002b3b35ccfc85b"
 dependencies = [
  "bare-metal 0.2.5",
  "cortex-m 0.6.7",
- "cortex-m-rt",
  "vcell",
 ]
 
@@ -606,7 +604,7 @@ dependencies = [
 [[package]]
 name = "vhrd-flash-writer"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/vhrd-flash-writer.git?branch=main#9984231dce93be86182fb339dc7deb531fa9cc66"
+source = "git+https://github.com/vhrdtech/vhrd-flash-writer.git?branch=main#0c556c59f914e3994dd0b082d71b586e2cbc88db"
 dependencies = [
  "cfg-if",
  "rtt-target",
@@ -625,7 +623,7 @@ version = "0.1.0"
 dependencies = [
  "hash32 0.1.1",
  "hash32-derive",
- "heapless 0.7.3",
+ "heapless 0.7.4",
 ]
 
 [[package]]

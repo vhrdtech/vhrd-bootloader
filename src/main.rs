@@ -43,6 +43,7 @@ fn blink_led(led: &mut UsrLedPin, amount_of_blinks: u8){
         led.set_low();
         delay(1_000_000);
     }
+    delay(8_000_000);
 }
 
 fn get_crc(data: &[u8]) -> u64{
