@@ -161,6 +161,7 @@ fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
                 None => {panic!()}
                 Some(d) => { d }
             } )).ok();
+            asm::delay(100);
         }
         if !reminder.is_empty(){
             can_data[0..reminder.len()].copy_from_slice(&reminder[0..reminder.len()]);
