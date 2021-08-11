@@ -29,7 +29,7 @@ cfg_if! {
     }
     else if #[cfg(feature = "reg-can")]{
             use stm32f0xx_hal::gpio::{Alternate, AF4, gpioa::{PA11, PA12}};
-            pub use bxcan::filter::BankConfig;
+            pub use stm32f0xx_hal::can::bxcan::filter::BankConfig;
             pub use stm32f0xx_hal::can::bxcan::Frame as BxFrame;
 
             pub type CanTx = PA12<Alternate<AF4>>;

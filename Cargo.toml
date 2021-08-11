@@ -22,10 +22,6 @@ uavcan-llr = {path = "../uavcan-llr", features = ["vhrdcan"]}
 path = "../mcp25625"#"0.1.0"
 optional = true
 
-[dependencies.bxcan]
-version = "0.2.0"
-optional = true
-
 [dependencies.vhrd-flash-writer]
 git = "https://github.com/vhrdtech/vhrd-flash-writer.git"
 branch = "main"
@@ -33,7 +29,7 @@ default-features = false
 optional = false
 
 [dependencies.stm32f0xx-hal]
-git = "https://github.com/stm32-rs/stm32f0xx-hal.git"
+git = "https://github.com/romixlab/stm32f0xx-hal.git"
 branch = "master"
 default-features = false
 optional = true
@@ -55,7 +51,7 @@ cortex-m0 = []
 
 
 spi-can = ["mcp25625"]
-reg-can = ["bxcan"]
+reg-can = []
 stm32f051 = ["stm32f0xx-hal/stm32f051","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f051"]
 stm32f072 = ["stm32f0xx-hal/stm32f072","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f072"] #fix flash-writer
 

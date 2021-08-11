@@ -27,8 +27,6 @@ use vhrdcan::{FrameId, FrameRef, Frame};
 use core::borrow::BorrowMut;
 use stm32f0xx_hal::pac::syscfg::cfgr1::MEM_MODE_A::SRAM;
 use crc::{Crc, Algorithm, CRC_32_AUTOSAR};
-use crate::CanState::WaitingOfTransfer;
-use crate::State::CheckNVConfig;
 
 use uavcan_llr::types::{TransferId, CanId, NodeId, SubjectId, Priority, TransferKind, Service, ServiceId};
 use core::convert::TryFrom;
@@ -70,14 +68,6 @@ const WAITING_CMD: FrameId = FrameId::new_extended(0x0000_0100).unwrap();
 const BOOTLOADER_KEY: u32 = 0xDEADBEEF;
 
 const FLASHER_NODE_ID: NodeId = NodeId::new(127).unwrap();
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum CanState{
-    WaitingOfTransfer,
-    StartOfTransfer,
-    DataTransfer,
-    EndOfTransfer
-}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum DataTransferState{
@@ -189,22 +179,22 @@ enum CanWorkerResult{
 
 fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a [u8])>>(can_iface: &mut CanInstance, src_node_id: &NodeId, mut r: R) -> Option<CanWorkerResult> {
     let mut cnt = 0u16;
-    while cnt < 4000{
+    while cnt < 2000{
         cnt += 1;
         #[cfg(feature = "spi-can")]
-            let rx_frame = if can_iface.interrupt_flags().rx0if_is_set(){ Some(can_iface.receive(McpReceiveBuffer::Buffer0))}else{ None };
+            let rx_frame_opt = if can_iface.interrupt_flags().rx0if_is_set(){ Some(can_iface.receive(McpReceiveBuffer::Buffer0))}else{ None };
         #[cfg(feature = "reg-can")]
-            let rx_frame =  match can_iface.receive() {
+            let rx_frame_opt =  match can_iface.receive() {
                 Err(_) => { None }
                 Ok(frame) => {
-                    let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap()) {
+                    let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap().as_ref()) {
                         None => { panic!() }
                         Some(f) => { f }
                     };
                     Some(rx_frame)
                 }
             };
-        match rx_frame{
+        match rx_frame_opt{
             None => {}
             Some(rx_frame) => {
                 let uavcan_id = match CanId::try_from(rx_frame.id){
@@ -226,8 +216,6 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
                                         let res = match s.service_id {
                                             READ_SERVICE => {
                                                 let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
-
-                                                //rprintln!("{:?}",read_option);
                                                 r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), src_node_id, &s.destination_node_id)
                                             }
                                             WRITE_CONFIG_SERVICE => {
@@ -272,7 +260,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
             }
         }
     }
-None
+    None
 }
 
 
@@ -296,10 +284,8 @@ let mut firmware_range = match FlashWriter::new(
 
 let nv_config = NVConfig::get();
 let mut pass_time_us = 0u64;
-let mut timeout_limit = 10_000u16;
-let mut can_state = CanState::WaitingOfTransfer;
+let mut timeout_limit = 20_000u16;
 let mut node_id = DEFAULT_NODE_ID;
-p.3.count_time_from_now();
 loop {
    // rprintln!("{:?}",state);
      state = match state{
@@ -539,7 +525,7 @@ loop {
          }
          State::Reboot => {
 
-             state = CheckNVConfig;
+             state = State::CheckNVConfig;
              unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, REBOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
              let aircr = 0xE000ED0C as *mut u32;
              unsafe { *aircr = (0x5FA << 16) | (1 << 2) };
