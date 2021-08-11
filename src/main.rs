@@ -519,6 +519,7 @@ loop {
          }
          State::Boot => {
              unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, BOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
+             asm::delay(1000);
              //rprintln!("Boot");
              #[cfg(not(feature = "cortex-m0"))]
                  unsafe {
@@ -545,6 +546,7 @@ loop {
 
              state = State::CheckNVConfig;
              unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, REBOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
+             asm::delay(1000);
              let aircr = 0xE000ED0C as *mut u32;
              unsafe { *aircr = (0x5FA << 16) | (1 << 2) };
              State::CheckNVConfig
