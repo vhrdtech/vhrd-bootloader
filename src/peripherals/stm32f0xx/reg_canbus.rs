@@ -33,5 +33,5 @@ pub fn reg_can_configure(can: &mut CanStmInstance, cfg: &stm32f0xx_hal::can::bxc
         let mut filters = can.modify_filters();
         filters.enable_bank(0, *cfg);
     }
-    can.enable();
+    can.enable().ok();
 }

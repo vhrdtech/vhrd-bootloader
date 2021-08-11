@@ -118,6 +118,9 @@ enum CommandEvent<'a>{
 
 fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
     //rprintln!("Can_tx");
+    #[cfg(feature = "reg-can")]
+        let frame_id = vhrdcanid2bxcanid(frame_id);
+
     if data.is_empty(){
         #[cfg(feature = "spi-can")]
         can_iface.send(
@@ -129,7 +132,10 @@ fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
             McpPriority::Low
         ).ok();
         #[cfg(feature = "reg-can")]
-            can_iface.transmit(&BxFrame::new_data(vhrdcanid2bxcanid(frame_id), BxData::new(&[]).unwrap())).ok();
+            can_iface.transmit(&BxFrame::new_data(frame_id, match BxData::new(&[]){
+            None => {panic!()}
+            Some(d) => { d }
+        } )).ok();
     }
     else{
         let chunks = data.chunks_exact(7);
@@ -151,7 +157,10 @@ fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
                 McpPriority::Low
             ).ok();
             #[cfg(feature = "reg-can")]
-                can_iface.transmit(&BxFrame::new_data(vhrdcanid2bxcanid(frame_id), BxData::new(can_data.as_slice()).unwrap())).ok();
+                can_iface.transmit(&BxFrame::new_data(frame_id, match BxData::new(can_data.as_slice()){
+                None => {panic!()}
+                Some(d) => { d }
+            } )).ok();
         }
         if !reminder.is_empty(){
             can_data[0..reminder.len()].copy_from_slice(&reminder[0..reminder.len()]);
@@ -166,7 +175,10 @@ fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
                 McpPriority::Low
             ).ok();
             #[cfg(feature = "reg-can")]
-                can_iface.transmit(&BxFrame::new_data(vhrdcanid2bxcanid(frame_id), BxData::new(&can_data[0..reminder.len() + 1]).unwrap())).ok();
+                can_iface.transmit(&BxFrame::new_data(frame_id, match BxData::new(&can_data[0..reminder.len() + 1]){
+                None => {panic!()}
+                Some(d) => { d }
+            })).ok();
         }
     }
 }
@@ -179,7 +191,7 @@ enum CanWorkerResult{
 
 fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a [u8])>>(can_iface: &mut CanInstance, src_node_id: &NodeId, mut r: R) -> Option<CanWorkerResult> {
     let mut cnt = 0u16;
-    while cnt < 2000{
+    while cnt < 4000{
         cnt += 1;
         #[cfg(feature = "spi-can")]
             let rx_frame_opt = if can_iface.interrupt_flags().rx0if_is_set(){ Some(can_iface.receive(McpReceiveBuffer::Buffer0))}else{ None };
@@ -187,11 +199,16 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
             let rx_frame_opt =  match can_iface.receive() {
                 Err(_) => { None }
                 Ok(frame) => {
-                    let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap().as_ref()) {
-                        None => { panic!() }
-                        Some(f) => { f }
-                    };
-                    Some(rx_frame)
+                    if frame.is_data_frame() {
+                        let rx_frame = match Frame::<8>::new(bxcanid2vhrdcanid(frame.id()), frame.data().unwrap().as_ref()) {
+                            None => { panic!() }
+                            Some(f) => { f }
+                        };
+                        Some(rx_frame)
+                    }
+                    else{
+                        None
+                    }
                 }
             };
         match rx_frame_opt{
