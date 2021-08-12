@@ -67,7 +67,7 @@ const WAITING_CMD: FrameId = FrameId::new_extended(0x0000_0100).unwrap();
 
 const BOOTLOADER_KEY: u32 = 0xDEADBEEF;
 
-const FLASHER_NODE_ID: NodeId = NodeId::new(127).unwrap();
+const FLASHER_NODE_ID: NodeId = NodeId::new(126).unwrap();
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum DataTransferState{
