@@ -61,18 +61,6 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "bxcan"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c40879b0695336c548abdfd93cd388f927f46fc9232b3f37433c672ddeee9478"
-dependencies = [
- "bitflags",
- "defmt",
- "nb 1.0.0",
- "vcell",
-]
-
-[[package]]
-name = "bxcan"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c1d9291cf411c216e1a37e138e491edb7733f0f4fd60532ddd0007b15e20c96"
@@ -460,10 +448,25 @@ dependencies = [
 [[package]]
 name = "stm32f0xx-hal"
 version = "0.17.1"
+source = "git+https://github.com/romixlab/stm32f0xx-hal.git?branch=master#8c8c9beba8824153e6b56d12ea062f075eee15d5"
+dependencies = [
+ "bare-metal 1.0.0",
+ "bxcan",
+ "cast",
+ "cortex-m 0.7.3",
+ "embedded-hal",
+ "nb 1.0.0",
+ "stm32f0",
+ "void",
+]
+
+[[package]]
+name = "stm32f0xx-hal"
+version = "0.17.1"
 source = "git+https://github.com/stm32-rs/stm32f0xx-hal.git?branch=master#73b0fac9a4fe7147d35fabaf0a42f64b24a49c15"
 dependencies = [
  "bare-metal 1.0.0",
- "bxcan 0.4.0",
+ "bxcan",
  "cast",
  "cortex-m 0.7.3",
  "embedded-hal",
@@ -583,7 +586,6 @@ checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
 name = "vhrd-bootloader"
 version = "0.1.0"
 dependencies = [
- "bxcan 0.2.3",
  "cfg-if",
  "cortex-m 0.6.7",
  "cortex-m-rt",
@@ -592,7 +594,7 @@ dependencies = [
  "mcp25625",
  "panic-halt",
  "rtt-target",
- "stm32f0xx-hal",
+ "stm32f0xx-hal 0.17.1 (git+https://github.com/romixlab/stm32f0xx-hal.git?branch=master)",
  "stm32g4xx-hal",
  "stm32l4xx-hal",
  "uavcan-llr",
@@ -609,7 +611,7 @@ dependencies = [
  "cfg-if",
  "rtt-target",
  "stm32-device-signature",
- "stm32f0xx-hal",
+ "stm32f0xx-hal 0.17.1 (git+https://github.com/stm32-rs/stm32f0xx-hal.git?branch=master)",
 ]
 
 [[package]]
