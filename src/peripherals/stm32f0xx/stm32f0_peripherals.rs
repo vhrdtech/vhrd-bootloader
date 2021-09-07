@@ -69,7 +69,7 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, CanInsta
 
     let usr_led = gpioa.pa6.into_push_pull_output(&cs);
 
-    let ticks_time = TicksTime::new(&mut cp.SYST, &clock);
+    let ticks_time = TicksTime::new(&mut cp.SYST, clock.clocks.hclk().0);
     let delay = Delay::new(cp.SYST, &clock);
 
     cfg_if! {

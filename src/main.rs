@@ -17,20 +17,21 @@ use core::panic::PanicInfo;
 use core::sync::atomic::{self, compiler_fence, Ordering};
 use vhrd_flash_writer::mem_ext::MemExt;
 
-use vhrd_module_nvconfig::{NVConfig, NV_CONFIG_START_ADDR, SIZE_OF_NVCONFIG};
+use vhrd_module_nvconfig::{NVConfig, SIZE_OF_NVCONFIG};
 use cortex_m::peripheral::syst::SystClkSource;
 
-use stm32f0xx_hal as hal;
+//use stm32f0xx_hal as hal;
 
-use crate::hal::{delay::Delay, pac, prelude::*};
+//use crate::hal::{delay::Delay, pac, prelude::*};
 use vhrdcan::{FrameId, FrameRef, Frame};
 use core::borrow::BorrowMut;
-use stm32f0xx_hal::pac::syscfg::cfgr1::MEM_MODE_A::SRAM;
+//use stm32f0xx_hal::pac::syscfg::cfgr1::MEM_MODE_A::SRAM;
 use crc::{Crc, Algorithm, CRC_32_AUTOSAR};
 
 use uavcan_llr::types::{TransferId, CanId, NodeId, SubjectId, Priority, TransferKind, Service, ServiceId};
 use core::convert::TryFrom;
 use uavcan_llr::tailbyte::TailByte;
+use embedded_hal::digital::v2::OutputPin;
 
 mod ticks_time;
 
@@ -280,7 +281,10 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
     }
     None
 }
-
+#[cfg(feature = "stm32f0xx-hal")]
+const NV_CONFIG_START_ADDR: usize = 0x0800_0000 + 10 * 1024;
+#[cfg(feature = "stm32f4xx-hal")]
+const NV_CONFIG_START_ADDR: usize = 0x0800_4000;
 
 #[entry]
 fn main() -> ! {
@@ -289,18 +293,41 @@ let mut state = State::CheckNVConfig;
 let mut prev_state = state;
 let mut p = peripherals::setup_peripherals();
 let mut flash_regs = p.1;
+
+#[cfg(feature = "stm32f0xx-hal")]
 let mut nv_config_range = match FlashWriter::new(NV_CONFIG_START_ADDR as u32..(NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)){
     Ok(f) => {f}
     Err(_) => { panic!() }
 };
+#[cfg(feature = "stm32f0xx-hal")]
 let mut firmware_range = match FlashWriter::new(
     (NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)
         ..(0x0800_0000 + flash_size_bytes())){
     Ok(f) => {f}
     Err(_) => { panic!() }
 };
-
+#[cfg(feature = "stm32f0xx-hal")]
 let nv_config = NVConfig::get();
+
+#[cfg(feature = "stm32f4xx-hal")]
+    let mut nv_config_range = match FlashWriter::new(NV_CONFIG_START_ADDR as u32..(NV_CONFIG_START_ADDR as u32 + SIZE_OF_NVCONFIG as u32)){
+    Ok(f) => {f}
+    Err(_) => { panic!() }
+};
+#[cfg(feature = "stm32f4xx-hal")]
+    let mut firmware_range = match FlashWriter::new(
+    0x0800_8000 as u32
+        ..(0x0800_0000 + flash_size_bytes())){
+    Ok(f) => {f}
+    Err(_) => { panic!() }
+};
+#[cfg(feature = "stm32f4xx-hal")]
+    let nv_config =  unsafe {
+    let addr = NV_CONFIG_START_ADDR as *const NVConfig;
+    &(*addr)
+};
+
+
 let mut pass_time_us = 0u64;
 let mut timeout_limit = 20_000u16;
 let mut node_id = DEFAULT_NODE_ID;
@@ -335,8 +362,13 @@ loop {
                      }
                 }
                  else if #[cfg(feature = "reg-can")] {
+                     #[cfg(not(feature = "bxcan"))]
                      let mut filter = unsafe{ stm32f0xx_hal::can::bxcan::filter::BankConfig::Mask32(stm32f0xx_hal::can::bxcan::filter::Mask32::frames_with_ext_id(
                          stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(filter), stm32f0xx_hal::can::bxcan::ExtendedId::new_unchecked(mask)
+                     ))};
+                     #[cfg(feature = "bxcan")]
+                      let mut filter = unsafe{ bxcan::filter::BankConfig::Mask32(bxcan::filter::Mask32::frames_with_ext_id(
+                         bxcan::ExtendedId::new_unchecked(filter), bxcan::ExtendedId::new_unchecked(mask)
                      ))};
                      reg_can_configure(p.5.borrow_mut(), filter.borrow_mut());
                  }
@@ -523,8 +555,8 @@ loop {
              //rprintln!("Boot");
              #[cfg(not(feature = "cortex-m0"))]
                  unsafe {
-                 let rv: usize = *(firmware_range.get_start_address() + 0x04 as *const usize);
-                 scb.vtor.write(firmware_range.get_start_address());
+                 let rv: usize = *((firmware_range.get_start_address() + 0x04) as *const usize);
+                 p.2.vtor.write(firmware_range.get_start_address());
                  let function = core::mem::transmute::<usize, extern "C" fn() -> !>(rv);
                  function();
              }

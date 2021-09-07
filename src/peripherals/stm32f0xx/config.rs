@@ -36,7 +36,7 @@ cfg_if! {
             pub type CanRx = PA11<Alternate<AF4>>;
             pub type CanStmInstance = stm32f0xx_hal::can::bxcan::Can<stm32f0xx_hal::can::CanInstance<CanTx, CanRx>>;
 
-            pub fn vhrdcanid2bxcanid(id: FrameId) -> crate::hal::can::bxcan::Id {
+            pub fn vhrdcanid2bxcanid(id: FrameId) -> stm32f0xx_hal::can::bxcan::Id {
                use stm32f0xx_hal::can::bxcan::{Id, StandardId, ExtendedId};
 
                match id {
@@ -44,7 +44,7 @@ cfg_if! {
                     FrameId::Extended(eid) => { Id::Extended(ExtendedId::new(eid.id()).unwrap()) }
                 }
             }
-            pub fn bxcanid2vhrdcanid(id: crate::hal::can::bxcan::Id) -> FrameId {
+            pub fn bxcanid2vhrdcanid(id: stm32f0xx_hal::can::bxcan::Id) -> FrameId {
                 use stm32f0xx_hal::can::bxcan::Id;
                 use vhrdcan::id::{StandardId, ExtendedId};
                 match id {

@@ -34,6 +34,11 @@ branch = "master"
 default-features = false
 optional = true
 
+[dependencies.stm32f4xx-hal]
+version = "0.9.0"
+default-features = false
+optional = true
+
 [dependencies.stm32g4xx-hal]
 path = "../stm32g4xx-hal"
 version = "0.0.0"
@@ -45,6 +50,10 @@ version = "0.6"
 default-features = false
 optional = true
 
+[dependencies.bxcan]
+version = ">=0.4, <0.6"
+optional = true
+
 [features]
 default = []
 cortex-m0 = []
@@ -54,7 +63,7 @@ spi-can = ["mcp25625"]
 reg-can = []
 stm32f051 = ["stm32f0xx-hal/stm32f051","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f051"]
 stm32f072 = ["stm32f0xx-hal/stm32f072","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f072"] #fix flash-writer
-
+stm32f405 = ["stm32f4xx-hal/stm32f405","stm32f4xx-hal/rt", "stm32f4xx-hal/can", "vhrd-flash-writer/stm32f405", "bxcan"]
 
 [[bin]]
 name = "vhrd-bootloader"

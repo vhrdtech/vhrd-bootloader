@@ -1,6 +1,10 @@
 use cortex_m::peripheral::SYST;
 use cortex_m::peripheral::syst::SystClkSource;
+
+#[cfg(feature = "stm32f0xx-hal")]
 use stm32f0xx_hal::rcc::Rcc;
+#[cfg(feature = "stm32f4xx-hal")]
+use stm32f4xx_hal::rcc::Rcc;
 
 const SYSTICK_RANGE: u32 = 0x0100_0000;
 
@@ -10,18 +14,18 @@ pub struct TicksTime{
 }
 
 impl TicksTime{
-    pub fn new(syst: &mut SYST, clock: &Rcc) -> TicksTime{
+    pub fn new(syst: &mut SYST, clock: u32) -> TicksTime{
         syst.set_clock_source(SystClkSource::Core);
 
         syst.set_reload(SYSTICK_RANGE - 1);
         syst.clear_current();
         syst.enable_counter();
 
-        assert!(clock.clocks.hclk().0 >= 1_000_000);
+        assert!(clock >= 1_000_000);
 
         TicksTime{
             prev_tics: SYST::get_current(),
-            clock_f: clock.clocks.hclk().0
+            clock_f: clock
         }
     }
 

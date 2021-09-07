@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="&lt;R+F&gt;_stm32f051_spi-can" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="+nightly run --release --features stm32f051,spi-can  --color=always" />
+    <option name="command" value="+nightly run --release --features stm32f051,spi-can  --color=always --target thumbv6m-none-eabi" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="false" />
