@@ -39,7 +39,7 @@ fn blink_led(led: &mut UsrLedPin, amount_of_blinks: u8){
     for _ in 0..amount_of_blinks{
         led.set_high().ok();
         delay(200_000);
-        led.set_low();
+        led.set_low().ok();
         delay(1_000_000);
     }
     delay(8_000_000);
@@ -234,7 +234,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
 
                                         let res = match s.service_id {
                                             READ_SERVICE => {
-                                                let read_option = if rx_frame.data[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
+                                                let read_option = if rx_frame.data()[0] == READ_CONFIG_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Config } else if rx_frame.data()[0] == READ_FIRMWARE_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Firmware } else if rx_frame.data()[0] == READ_BOOTLOADER_CMD && rx_frame.data().len() == 2 { BootloaderReadOptions::Bootloader } else { BootloaderReadOptions::RawAddress };
                                                 r(CommandEvent::Read(read_option, &rx_frame.data()[0..rx_frame.data().len()]), &s.destination_node_id, &uavcan_id.source_node_id)
                                             }
                                             WRITE_CONFIG_SERVICE => {

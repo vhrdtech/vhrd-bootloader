@@ -14,8 +14,8 @@ cfg_if! {
                use bxcan::{Id, StandardId, ExtendedId};
 
                match id {
-                    FrameId::Standard(sid) => { Id::Standard(StandardId::new(sid.id()).unwrap()) }
-                    FrameId::Extended(eid) => { Id::Extended(ExtendedId::new(eid.id()).unwrap()) }
+                    FrameId::Standard(sid) => { Id::Standard(StandardId::new(sid.inner()).unwrap()) }
+                    FrameId::Extended(eid) => { Id::Extended(ExtendedId::new(eid.inner()).unwrap()) }
                 }
             }
             pub fn bxcanid2vhrdcanid(id: bxcan::Id) -> FrameId {
