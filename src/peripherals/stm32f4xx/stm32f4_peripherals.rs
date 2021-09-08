@@ -32,14 +32,14 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, CanInsta
     };
 
     rcc.apb1enr.modify(|_, w| w.can1en().enabled()); // can time enb
-    rcc.apb2enr.modify(|_, w| w.syscfgen().enabled());
+    //rcc.apb2enr.modify(|_, w| w.syscfgen().enabled());
 
     let mut rcc = rcc.constrain();
     /*let mut clock = rcc
         .configure()
         .sysclk(8.mhz())
         .freeze(&mut dp.FLASH);*/
-    let mut clock = rcc.cfgr.use_hse(8.mhz()).freeze();
+    let mut clock = rcc.cfgr.sysclk(8.mhz()).use_hse(8.mhz()).hclk(8.mhz()).freeze();
 
     let gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();

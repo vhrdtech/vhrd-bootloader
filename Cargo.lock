@@ -699,7 +699,7 @@ dependencies = [
 [[package]]
 name = "vhrd-flash-writer"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/vhrd-flash-writer.git?branch=main#51aaeb6263824dc72e058c663ac60f6a844a0cf2"
+source = "git+https://github.com/vhrdtech/vhrd-flash-writer.git?branch=main#12d28f25b16345a36070d69ddcbc4a43e4649543"
 dependencies = [
  "cfg-if",
  "rtt-target",

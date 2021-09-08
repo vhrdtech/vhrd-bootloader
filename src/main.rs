@@ -327,12 +327,14 @@ let nv_config = NVConfig::get();
     &(*addr)
 };
 
+    //rprintln!("fw_st_a 0x{:08x}",firmware_range.get_start_address());
+    //rprintln!("fw_en_a 0x{:08x}",0x0800_0000 + flash_size_bytes());
 
 let mut pass_time_us = 0u64;
 let mut timeout_limit = 20_000u16;
 let mut node_id = DEFAULT_NODE_ID;
 loop {
-   // rprintln!("{:?}",state);
+    // rprintln!("{:?}",state);
      state = match state{
          State::CheckNVConfig => {
              prev_state = State::CheckNVConfig;
@@ -551,11 +553,11 @@ loop {
          }
          State::Boot => {
              unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, BOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
-             asm::delay(1000);
+             asm::delay(5000);
              //rprintln!("Boot");
              #[cfg(not(feature = "cortex-m0"))]
                  unsafe {
-                 let rv: usize = *((firmware_range.get_start_address() + 0x04) as *const usize);
+                 let rv: usize = *((firmware_range.get_start_address() + 4u32) as *const usize);
                  p.2.vtor.write(firmware_range.get_start_address());
                  let function = core::mem::transmute::<usize, extern "C" fn() -> !>(rv);
                  function();
