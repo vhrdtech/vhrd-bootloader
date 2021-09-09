@@ -284,7 +284,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
 #[cfg(feature = "stm32f0xx-hal")]
 const NV_CONFIG_START_ADDR: usize = 0x0800_0000 + 10 * 1024;
 #[cfg(feature = "stm32f4xx-hal")]
-const NV_CONFIG_START_ADDR: usize = 0x0800_4000;
+const NV_CONFIG_START_ADDR: usize = 0x080E_0000; // for vesc
 
 #[entry]
 fn main() -> ! {
@@ -316,8 +316,8 @@ let nv_config = NVConfig::get();
 };
 #[cfg(feature = "stm32f4xx-hal")]
     let mut firmware_range = match FlashWriter::new(
-    0x0800_8000 as u32
-        ..(0x0800_0000 + flash_size_bytes())){
+    0x0800_C000u32
+        ..0x080E_0000u32){
     Ok(f) => {f}
     Err(_) => { panic!() }
 };
@@ -401,6 +401,7 @@ loop {
              else {
                  //rprintln!("Firmware_size:{}", nv_config.board_config.fw_size);
                  State::Error
+                 //State::CheckFirmwareValidity // ONLY FOR VESC
              }
          }
          State::CheckFirmwareValidity => {
@@ -412,6 +413,7 @@ loop {
                  false => {
                      //rprintln!("0x{:08x} != 0x{:08x}", nv_config.board_config.fw_crc, get_crc(flash_read_slice::<u8>(firmware_range.get_start_address(), nv_config.board_config.fw_size as usize)));
                      State::Error
+                     //State::WaitingNewCommandTimeout //ONLY FOR VESC
                  }
              }
          }
