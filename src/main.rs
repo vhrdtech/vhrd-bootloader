@@ -30,7 +30,7 @@ use crc::{Crc, Algorithm, CRC_32_AUTOSAR};
 
 use uavcan_llr::types::{TransferId, CanId, NodeId, SubjectId, Priority, TransferKind, Service, ServiceId};
 use core::convert::TryFrom;
-use uavcan_llr::tailbyte::TailByte;
+use uavcan_llr::tailbyte::{TailByte, Kind};
 use embedded_hal::digital::v2::OutputPin;
 
 mod ticks_time;
@@ -142,7 +142,7 @@ fn can_transmit(can_iface: &mut CanInstance, frame_id: FrameId, data: &[u8]){
         let chunks = data.chunks_exact(7);
         let reminder = chunks.remainder();
         let tr_id = TransferId::new(0).unwrap();
-        let mut tail_byte = TailByte::multi_frame_transfer(tr_id, chunks.len() + if reminder.is_empty(){ 0usize } else { 1usize });
+        let mut tail_byte = TailByte::new_multi_frame(tr_id, chunks.len() + if reminder.is_empty(){ 0usize } else { 1usize });
         let mut can_data = [0u8;8];
         //rprintln!("Before send");
         for msg in chunks.into_iter(){
@@ -230,7 +230,7 @@ fn can_worker<'a, R: FnMut(CommandEvent, &NodeId, &NodeId)->Option<(FrameId, &'a
                                     if rx_frame.data().len() != 0 {
                                         let tail_byte = TailByte::from(*rx_frame.data().last().unwrap());
                                         let data_transfer_state =
-                                            if tail_byte.start_of_transfer == true && tail_byte.end_of_transfer == false && tail_byte.toggle_bit == true { DataTransferState::StartOfTransfer } else if tail_byte.start_of_transfer == false && tail_byte.end_of_transfer == true { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
+                                            if tail_byte.kind == Kind::MultiFrame { DataTransferState::StartOfTransfer } else if tail_byte.kind == Kind::EndT0 || tail_byte.kind == Kind::EndT1 { DataTransferState::EndOfTransfer } else { DataTransferState::DataTransfer };
 
                                         let res = match s.service_id {
                                             READ_SERVICE => {

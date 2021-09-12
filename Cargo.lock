@@ -639,9 +639,12 @@ checksum = "b63708a265f51345575b27fe43f9500ad611579e764c79edbc2037b1121959ec"
 [[package]]
 name = "uavcan-llr"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/uavcan-llr.git#84a1de90742a967274720ca9b0bc4fcd77e44fb9"
+source = "git+https://github.com/vhrdtech/uavcan-llr.git#09cdb2b5e15bc4caec1b5e040195ce5787721cdf"
 dependencies = [
  "crc-any",
+ "hash32 0.2.1",
+ "hash32-derive",
+ "heapless 0.7.5",
  "vhrdcan 0.1.0 (git+https://github.com/vhrdtech/vhrdcan.git)",
 ]
 
@@ -713,13 +716,12 @@ dependencies = [
 [[package]]
 name = "vhrd-module-nvconfig"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/vhrd-module-nvconfig.git?branch=master#5ccafea36f8b35a8b365b6fac53bcb40e72e0ec7"
 
 [[package]]
 name = "vhrdcan"
 version = "0.1.0"
 dependencies = [
- "hash32 0.1.1",
+ "hash32 0.2.1",
  "hash32-derive",
  "heapless 0.7.5",
 ]
@@ -727,9 +729,9 @@ dependencies = [
 [[package]]
 name = "vhrdcan"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/vhrdcan.git#e40bd6a463f03fc48b3ca070e263f2b7cc8529fa"
+source = "git+https://github.com/vhrdtech/vhrdcan.git#9ffe851daae96c315d694df398b1525a872f3aca"
 dependencies = [
- "hash32 0.1.1",
+ "hash32 0.2.1",
  "hash32-derive",
  "heapless 0.7.5",
 ]
