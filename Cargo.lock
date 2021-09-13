@@ -723,7 +723,6 @@ version = "0.1.0"
 dependencies = [
  "hash32 0.2.1",
  "hash32-derive",
- "heapless 0.7.5",
 ]
 
 [[package]]

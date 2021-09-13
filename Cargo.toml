@@ -57,12 +57,13 @@ optional = true
 default = []
 cortex-m0 = []
 
-
 spi-can = ["mcp25625"]
 reg-can = []
 stm32f051 = ["stm32f0xx-hal/stm32f051","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f051"]
 stm32f072 = ["stm32f0xx-hal/stm32f072","stm32f0xx-hal/rt", "cortex-m0", "vhrd-flash-writer/stm32f072"] #fix flash-writer
 stm32f405 = ["stm32f4xx-hal/stm32f405","stm32f4xx-hal/rt", "stm32f4xx-hal/can", "vhrd-flash-writer/stm32f405", "bxcan"]
+
+pi-en = []
 
 [[bin]]
 name = "vhrd-bootloader"

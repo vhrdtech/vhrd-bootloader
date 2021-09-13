@@ -67,6 +67,13 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, CanInsta
     let mut can_stby = gpioa.pa15.into_push_pull_output(&cs);
     can_stby.set_low().ok();
 
+    cfg_if! {
+        if #[cfg(feature = "pi-en")] {
+            let mut pi_en = gpiob.pb0.into_push_pull_output(&cs);
+            pi_en.set_high().ok();
+        }
+    }
+
     let usr_led = gpioa.pa6.into_push_pull_output(&cs);
 
     let ticks_time = TicksTime::new(&mut cp.SYST, clock.clocks.hclk().0);

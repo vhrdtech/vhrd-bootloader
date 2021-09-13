@@ -103,7 +103,7 @@ const READ_CONFIG_CMD: u8 = 0x01;
 const READ_FIRMWARE_CMD: u8 = 0x02;
 const READ_BOOTLOADER_CMD: u8 = 0x03;
 
-const DEFAULT_NODE_ID: NodeId = NodeId::new(0).unwrap();
+const DEFAULT_NODE_ID: NodeId = NodeId::new(8).unwrap();
 
 enum CommandError{
     WrongServiceId,
@@ -554,7 +554,7 @@ loop {
              state
          }
          State::Boot => {
-             unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, BOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
+             can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, BOOT_MSG, false, Priority::High).into()).unwrap(), &[]);
              asm::delay(5000);
              //rprintln!("Boot");
              #[cfg(not(feature = "cortex-m0"))]
@@ -581,7 +581,7 @@ loop {
          State::Reboot => {
 
              state = State::CheckNVConfig;
-             unsafe{ can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, REBOOT_MSG, false, Priority::High).into()).unwrap(), &[])};
+             can_transmit(p.5.borrow_mut(), FrameId::new_extended(CanId::new_message_kind(node_id, REBOOT_MSG, false, Priority::High).into()).unwrap(), &[]);
              asm::delay(1000);
              let aircr = 0xE000ED0C as *mut u32;
              unsafe { *aircr = (0x5FA << 16) | (1 << 2) };
