@@ -639,7 +639,7 @@ checksum = "b63708a265f51345575b27fe43f9500ad611579e764c79edbc2037b1121959ec"
 [[package]]
 name = "uavcan-llr"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/uavcan-llr.git#09cdb2b5e15bc4caec1b5e040195ce5787721cdf"
+source = "git+https://github.com/vhrdtech/uavcan-llr.git#79db3cf4431bf0c09bafb77780463013775dc641"
 dependencies = [
  "crc-any",
  "hash32 0.2.1",
@@ -704,7 +704,7 @@ dependencies = [
 [[package]]
 name = "vhrd-flash-writer"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/vhrd-flash-writer.git?branch=main#12d28f25b16345a36070d69ddcbc4a43e4649543"
+source = "git+https://github.com/vhrdtech/vhrd-flash-writer.git?branch=main#58c41186259525311d9283e9b117573e6a33f989"
 dependencies = [
  "cfg-if",
  "rtt-target",
@@ -728,11 +728,10 @@ dependencies = [
 [[package]]
 name = "vhrdcan"
 version = "0.1.0"
-source = "git+https://github.com/vhrdtech/vhrdcan.git#9ffe851daae96c315d694df398b1525a872f3aca"
+source = "git+https://github.com/vhrdtech/vhrdcan.git#10bca9c3cecb6c73045e0d8b9b148326a738cdad"
 dependencies = [
  "hash32 0.2.1",
  "hash32-derive",
- "heapless 0.7.5",
 ]
 
 [[package]]
