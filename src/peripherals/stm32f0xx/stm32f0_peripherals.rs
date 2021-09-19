@@ -71,6 +71,8 @@ pub fn setup_peripherals() -> (UsrLedPin, FLASH, SCB, TicksTime, Delay, CanInsta
         if #[cfg(feature = "pi-en")] {
             let mut pi_en = gpiob.pb0.into_push_pull_output(&cs);
             pi_en.set_high().ok();
+            let mut can_stby_pi = gpiob.pb2.into_push_pull_output(&cs);
+            can_stby_pi.set_low().ok();
         }
     }
 
